@@ -47,3 +47,14 @@ look up zero or more source locations, then allow you to cycle
 through them with "M-x pscope-next".  With a prefix argument, the
 functions will instead display a grep-mode buffer listing all the
 hits, from which you can then navigate.
+
+TODO
+====
+
+* (Easy) Use module, file, and line number to refine queries on the
+  Perl side.
+* (Hard) Use module, file, and line number to filter results on the
+  Emacs side.
+* (Medium) Clean up Perl side.
+* (Hard) Merge with B::Xref.
+* (Medium) Better documentation for Elisp side.

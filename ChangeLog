@@ -1,0 +1,10 @@
+2004-04-02  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* Xref.pm: minor cleanup.
+
+	* pscope.el: pass module, file, line to Perl side (where it's
+	  ignored for now); fix line number refinement to be a
+	  little less over-eager; fix pscope-callees to go to sub
+	  definitions instead of call sites.
+
+	* README: added TODO section.
