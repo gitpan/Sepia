@@ -54,7 +54,7 @@ A map of subs to subs called.
 
 A map of subs to definitions.
 
-=item C<%package_sub>
+=item C<%module_subs>
 
 A map of packages to subs defined.
 
@@ -82,7 +82,7 @@ A map of files to module names.
 our %call;
 our %callby;
 our %def;
-our %package_sub;
+our %module_subs;
 our %var_def;
 our %var_use;
 our %module_files;
@@ -91,29 +91,38 @@ our %file_modules;
 require Exporter;
 our @ISA = qw(Exporter);
 my @most = qw(redefined forget rebuild callers callees defs
-	      var_defs var_uses package_subs mod_file file_modules
-	      apropos var_apropos mod_apropos file_apropos);
+	      var_defs var_uses
+	      mod_subs mod_files mod_decls mod_apropos
+	      apropos var_apropos file_apropos);
 our @EXPORT_OK = (@most,
     qw(xref_definitions xref_object xref_main
-       %call %callby %def %package_sub
+       %call %callby %def %module_subs
        %var_use %var_def %module_files %file_modules));
 
 our %EXPORT_TAGS =
     (all => \@EXPORT_OK,
      most => \@most);
 
+######################################################################
+## Xref state variables:
+
 sub UNKNOWN { ["?", "?", "?"] }
 
-my @pad;			# lexicals in current pad
+our @pad;			# lexicals in current pad
 				# as ["(lexical)", type, name]
-my %done;			# keyed by $$op: set when each $op is done
+our %done;			# keyed by $$op: set when each $op is done
 my $top = UNKNOWN;		# shadows top element of stack as
 				# [pack, type, name] (pack can be "(lexical)")
-my $file;			# shadows current filename
+our $file;			# shadows current filename
 my $line;			# shadows current line number
-my $subname;			# shadows current sub name
-my @todo = ();			# List of CVs that need processing
-my %firstline;		# first line numbers seen in a sub (hack)
+our $subname;			# shadows current sub name
+our @todo = ();			# List of CVs that need processing
+our %firstline;		# first line numbers seen in a sub (hack)
+
+our $DEBUG = 0;
+sub dprint {
+    print STDERR "@_" if $DEBUG;
+}
 
 my %code = (intro => "i", used => "",
 	    subdef => "s", subused => "&",
@@ -128,6 +137,7 @@ my ($debug_op, $debug_top, $nodefs, $raw);
 sub guess_module_file {
     my ($pack, $ofile) = @_;
     my $file;
+    return $ofile if -f $ofile;
 
     if (exists  $module_files{$pack}) {
 	my $m = (keys %{$module_files{$pack}})[0];
@@ -197,6 +207,7 @@ sub add_def {
 
 sub process {
     my ($var, $event) = @_;
+    dprint "Processing $event: @$var ($subname)";
     my ($pack, $type, $name) = @$var;
     my $pack = realpack($pack);
     if ($type eq "*") {
@@ -248,7 +259,8 @@ sub process {
 		    sub => $name,
 		    package => $pack,
 		    line => $l };
-	add_use $package_sub{$pack}, $obj, $file, $l, $pack;
+	add_use $module_subs{$pack}, $obj, $file, $l, $pack;
+	dprint "Adding definition for $name at $file:$l";
 	add_def $def{$name}, $obj, $file, $l, $pack;
     } elsif ($name !~ /^[\x00-\x1f^] | ^\d+$ | ^[\W_]$
 		       | ^(?:ENV|INC|STD(?:IN|OUT|ERR)|SIG)$ /x
@@ -272,6 +284,8 @@ sub process {
 	      assign => ($event eq 'set'),
 	    },
 		$file, $line;
+	} else {
+	    dprint "Ignoring var event $event";
 	}
     }
 }
@@ -302,7 +316,7 @@ sub update_line_number {
 sub load_pad {
     my $padlist = shift;
     my ($namelistav, $vallistav, @namelist, $ix);
-    @pad = ();
+    local @pad = ();
     return if class($padlist) eq "SPECIAL";
     ($namelistav,$vallistav) = $padlist->ARRAY;
     @namelist = $namelistav->ARRAY;
@@ -358,15 +372,20 @@ sub xref {
 sub xref_cv {
     my $cv = shift;
     my $pack = $cv->GV->STASH->NAME;
-    $subname = ($pack eq "main" ? "" : "$pack\::") . $cv->GV->NAME;
+    local $subname = ($pack eq "main" ? "" : "$pack\::") . $cv->GV->NAME;
+    dprint "Xreffing $subname";
     load_pad($cv->PADLIST);
     xref($cv->START);
-    $subname = "(main)";
 }
 
 sub xref_object {
     my $cvref = shift;
-    xref_cv(svref_2object($cvref));
+    local @todo;
+    local %firstline;
+    my $cv = svref_2object($cvref);
+    xref_cv($cv);
+    my $gv = $cv->GV;
+    process([$gv->STASH->NAME, '&', $gv->NAME], 'subdef');
 }
 
 sub xref_main {
@@ -526,24 +545,29 @@ Rebuild the Xref database.
 =cut
 
 sub rebuild {
-    %call = (); %callby = (); %def = (); %package_sub = ();
+    %call = (); %callby = (); %def = (); %module_subs = ();
     %var_def = (); %var_use = ();
     %module_files = (); %file_modules = ();
+    local @todo;
+    local %firstline;
     xref_definitions;
     xref_main;
     1;
 }
 
-sub unmention(%$$$) {
+sub unmention {
     my ($h, $K, $V, $pack) = @_;
+    dprint "Unmentioning $K => $V";
     while (my ($k, $v) = each %$h) {
 	$h->{$k} =
-	    [grep { $_->{$K} ne $V || ($pack && $pack ne $_->{package}) } @$v];
+	    [grep { $_->{$K} ne $V || !$pack || $pack ne $_->{package} } @$v];
+	delete $h->{$k} unless @{$h->{$k}};
     }
 }
 
-sub unmention_sub(%$$) {
+sub unmention_sub {
     my ($h, $sub, $pack) = @_;
+    dprint "Unmentioning sub $sub";
     if (exists $h->{$sub}) {
 	if ($pack) {
 	    my $hs = $h->{$sub};
@@ -562,13 +586,13 @@ Forget that C<$func> was defined.
 =cut
 
 sub forget {
-    my ($obj, $pack) = @_;
-    unmention_sub %def, $obj, $pack;
-    unmention_sub %callby, $obj, $pack;
-    unmention %call, 'sub', @_;
-    unmention %package_sub, 'sub', @_;
-    unmention %var_use, 'sub', @_;
-    unmention %var_def, 'sub', @_;
+#    my ($obj, $pack) = @_;
+    unmention_sub \%def, @_;
+    unmention_sub \%callby, @_;
+    unmention \%call, 'sub', @_;
+    unmention \%module_subs, 'sub', @_;
+    unmention \%var_use, 'sub', @_;
+    unmention \%var_def, 'sub', @_;
 }
 
 =item C<redefined($func [, $pack])>
@@ -583,7 +607,9 @@ sub redefined {
 	no strict 'refs';
 	my ($sub, $pack) = @_;
 	$pack ||= 'main';
-	xref_object \&{"$pack\::$sub"};
+	$sub = $pack eq 'main' ? $sub : "$pack\::$sub";
+	local $subname = '(definitions)';
+	xref_object \&$sub;
     }
 }
 
@@ -673,15 +699,34 @@ sub var_assigns {
     return _ret_list [ grep $_->{assign},@{$var_use{$v}} ];
 }
 
-=item C<package_subs($pack)>
+=item C<mod_subs($pack)>
 
 Find subs in package C<$pack>.
 
 =cut
 
-sub package_subs {
+sub mod_subs {
     my $p = shift;
-    return _ret_list $package_sub{$p};
+    return _ret_list $module_subs{$p};
+}
+
+=item C<mod_decls($pack)>
+
+Generate a list of declarations for all subroutines in package
+C<$pack>.
+
+=cut
+
+sub mod_decls {
+    my $pack = shift;
+    no strict 'refs';
+    my @ret = map {
+	my $sn = $_->[2];
+	my $proto = prototype(\&{"$pack\::$sn"});
+	$proto = defined($proto) ? "($proto)" : '';
+	"sub $sn $proto;\n";
+    } Devel::Xref::mod_subs($pack);
+    return wantarray ? @ret : join '', @ret;
 }
 
 =item C<mod_file($mod)>

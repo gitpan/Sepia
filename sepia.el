@@ -19,7 +19,17 @@
 ;;; Xrefs -- use Perl to find definitions and uses.
 
 (defvar sepia-use-completion t
-  "* Use completion based on Xref database.")
+  "* Use completion based on Xref database.  Turning this off may
+speed up some operations, if you don't mind losing completion.")
+
+(defvar sepia-eval-defun-include-decls t
+  "* Generate and use a declaration list for ``sepia-eval-defun''.
+Without this, code often will not parse; with it, evaluation may
+be a bit less responsive.  Note that since this only includes
+subs from the evaluation package, it may not always work.")
+
+(defvar sepia-prefix-key (kbd "\M-.")
+  "* Prefix for functions in ``sepia-keymap''.")
 
 (defvar sepia-initializer
 "
@@ -50,9 +60,6 @@ sub _module_info($)
 
 1;
 ")
-
-(defvar sepia-prefix-key (kbd "\M-.")
-  "Prefix for functions in ``sepia-keymap''.")
 
 (defvar sepia-keymap
   (let ((km (make-sparse-keymap)))
@@ -128,8 +135,7 @@ Does not require loading.")
     (define-modinfo-function (car x) (cdr x)))
 
   ;; Create low-level wrappers for Devel::Xref
-  (dolist (x '((package-subs . "Find all subs defined in a package.")
-	       (rebuild . "Build Xref database for current Perl process.")
+  (dolist (x '((rebuild . "Build Xref database for current Perl process.")
 	       (redefined . "Rebuild Xref information for a given sub.")
 
 	       (defs . "Find all definitions of a function.")
@@ -145,7 +151,9 @@ Does not require loading.")
 	       (var-assigns . "Find all assignments to a variable.")
 	       (var-uses . "Find all uses of a variable.")
 
+	       (mod-subs . "Find all subs defined in a package.")
 	       (mod-files . "Find the file defining a module.")
+	       (mod-decls . "Generate declarations for subs in a module.")
 	       (guess-module-file . "Guess file corresponding to module.")
 	       (file-modules . "List the modules defined in a file.")))
     (define-xref-function (car x) (cdr x)))
@@ -170,7 +178,7 @@ Does not require loading.")
   (let ((name (intern (format "sepia-module-%s" name)))
 	(pl-func
 	 (perl-eval (format "sub { _module_info(shift)->%s }" (perl-name name))
-		    'scalar-context))
+		    'list-context))
 	(full-doc (concat (or doc "") "
 
 This function uses Module::Info, so it does not require that the
@@ -197,11 +205,13 @@ symbol at point."
 		    (file (or (thing-at-point 'file) (buffer-file-name)))
 		    (t (sepia-thing-at-point 'symbol))))
 	 (text (capitalize (symbol-name type)))
-	 (choices (case type
-		    (variable (xref-var-apropos))
-		    (function (xref-apropos))
-		    (module (xref-mod-apropos))
-		    (t nil)))
+	 (choices (lambda (str &rest blah)
+		    (let ((str (concat "^" str)))
+		      (case type
+			(variable (xref-var-apropos str))
+			(function (xref-apropos str))
+			(module (xref-mod-apropos str))
+			(t nil)))))
 	 (ret (if sepia-use-completion
 		  (completing-read (format "%s [%s]: " text default)
 				   choices nil nil nil 'sepia-history
@@ -238,7 +248,7 @@ symbol at point."
 
 (defmacro ifa (test then &rest else)
   `(let ((it ,test))
-     (if it ,then ,else)))
+     (if it ,then ,@else)))
 
 (defun sepia-show-locations (locs)
   (when locs
@@ -366,7 +376,7 @@ buffer.
 
 (define-sepia-query sepia-module-describe
     "Find all subroutines in a package."
-  xref-package-subs
+  xref-mod-subs
   nil
   'module)
 
@@ -423,15 +433,22 @@ rebuilds the database unless a prefix argument is given."
       (let ((sub-re (concat "^\\s *sub\\s +.*" ident)))
 	(cond
 	  (line (goto-line line)
-		(re-search-backward sub-re nil t))
+		(or (re-search-backward sub-re
+					(my-bol-from (point) -20) t)
+		    (re-search-forward sub-re
+				       (my-bol-from (point) 10) t))
+		(beginning-of-line))
 	  (t (goto-char (point-min))
 	     (re-search-forward sub-re nil t))))))
     (variable
      (lambda (line ident)
-       (cond
-	 (line (goto-line line))
-	 (t (goto-char (point-min))
-	    (re-search-forward (concat "\\<" ident "\\>" nil t))))))
+       (let ((var-re (concat "\\<" ident "\\>")))
+	 (cond
+	   (line (goto-line line)
+		 (or (re-search-backward var-re (my-bol-from (point) -5) t)
+		     (re-search-forward var-re (my-bol-from (point) 5) t)))
+	   (t (goto-char (point-min))
+	      (re-search-forward var-re nil t))))))
     (t (lambda (line ident) (and line (goto-line line))))))
 
 (defun sepia-next ()
@@ -549,7 +566,7 @@ evaluate the current line and display the result."
    (sepia-eval (concat "do{"
 		       (buffer-substring (my-bol-from (point))
 					 (my-eol-from (point)))
-		       "}") scalarp t)))
+		       "}"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Miscellany
@@ -565,16 +582,16 @@ evaluate the current line and display the result."
 	       (insert new-str))
 	(message new-str))))
 
-(defun my-eol-from (pt)
+(defun my-eol-from (pt &optional n)
   (save-excursion
     (goto-char pt)
-    (end-of-line)
+    (end-of-line n)
     (point)))
 
-(defun my-bol-from (pt)
+(defun my-bol-from (pt &optional n)
   (save-excursion
     (goto-char pt)
-    (beginning-of-line)
+    (beginning-of-line n)
     (point)))
 
 (defun perl-pe-region (expr beg end &optional replace-p)
@@ -614,12 +631,19 @@ rebuild its Xrefs."
     (let ((beg (progn (beginning-of-defun) (point)))
 	  (end (progn (end-of-defun) (point))))
       (goto-char beg)
-      (when (looking-at "^sub\s +\\([^ 	{]+\\)")
+      (when (looking-at "^sub\\s +\\([^ 	{]+\\)")
 	(let* ((sub (match-string 1))
 	       (sepia-eval-package
-		(sepia-guess-package sub (buffer-file-name))))
-	  (sepia-eval (buffer-substring-no-properties beg end))
-	  (xref-redefined (match-string 1) sepia-eval-package))))))
+		(sepia-guess-package sub (buffer-file-name)))
+	       (body (buffer-substring-no-properties beg end))
+	       (sepia-eval-file (buffer-file-name))
+	       (sepia-eval-line (line-number-at-pos beg)))
+	  (sepia-eval (if sepia-eval-defun-include-decls
+			  (concat
+			   (apply #'concat (xref-mod-decls sepia-eval-package))
+			   body)
+			  body))
+	  (xref-redefined sub sepia-eval-package))))))
 
 (defun sepia-eval-buffer (&optional no-update)
   "Re-evaluate the current file; unless prefix argument is given,
@@ -636,6 +660,10 @@ also rebuild the xref database."
 
 (defvar sepia-eval-package "main"
   "Package in which ``sepia-eval'' evaluates perl expressions.")
+(defvar sepia-eval-file nil
+  "File in which ``sepia-eval'' evaluates perl expressions.")
+(defvar sepia-eval-line nil
+  "Line at which ``sepia-eval'' evaluates perl expressions.")
 (defvar sepia-repl-hook nil
   "Hook run after Sepia REPL starts.")
 
@@ -652,14 +680,20 @@ also rebuild the xref database."
 
 (defun sepia-eval (string)
   "Evaluate STRING as Perl code, returning the pretty-printed
-value of the last expression.  XXX: this is the only function
-that requires EPL (the rest can use Pmacs)."
+value of the last expression.  If SOURCE-FILE is given, use this
+as the file containing the code to be evaluated.  XXX: this is
+the only function that requires EPL (the rest can use Pmacs)."
   (epl-eval (epl-init) nil 'scalar-context
-	    "{ package " (or sepia-eval-package "main") ";
-require Data::Dumper;
-local $Data::Dumper::Indent=0; local $Data::Dumper::Deparse=1;
-local $_ = Data::Dumper::Dumper([do { " string "}]);
-s/^.*?=\\s*\\[//; s/\\];$//;$_}"))
+  (concat
+ "{ package " (or sepia-eval-package "main") ";"
+ (if sepia-eval-file (concat "$Devel::Xref::file = \"" sepia-eval-file "\";")
+     "")
+ (if sepia-eval-line (format "$Devel::Xref::line = %d;" sepia-eval-line)
+     "")
+ "require Data::Dumper;"
+ "local $Data::Dumper::Indent=0; local $Data::Dumper::Deparse=1;"
+ "local $_ = Data::Dumper::Dumper([do { " string "}]);"
+ "s/^.*?=\\s*\\[//; s/\\];$//;$_}")))
 
 (defun sepia-interact ()
 "Start or switch to a perl interaction buffer."

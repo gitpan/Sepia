@@ -1,3 +1,22 @@
+2004-04-08  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* Xref.pm: Localize a bunch of things instead of stomping on
+	package lexicals.  This makes the module better handle repeated
+	use, for which it wasn't designed.
+	
+	* Xref.pm (mod_subs): Rename package_subs for consistency.
+	(mod_decls): New function to generate decls for evaluation.
+
+	* sepia.el: misc bug-fixes, and better support for redefining
+	functions with sepia-eval-defun, especially preserving files and
+	line numbers.
+	(sepia-eval): remove newlines to make line-numbers make more
+	sense to user.
+	(sepia-interactive-arg): delay reading completions to speed up
+	\M-. functions.
+	(sepia-refiner): search both forward and backward, to adjust for
+	e.g. adding comments.  Still not so good, but better.
+
 2004-04-06  Sean O'Rourke  <seano@cs.ucsd.edu>
 
 	* sepia-w3m.el: moved w3m-perldoc support here.
