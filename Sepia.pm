@@ -1,5 +1,5 @@
 package Sepia;
-our $VERSION = '0.56';
+our $VERSION = '0.57';
 
 require Exporter;
 our @ISA = qw(Exporter);
@@ -19,7 +19,12 @@ sub _apropos_re($)
     qr/$re/;
 }
 
-=item C<completions($string)>
+=item C<@compls = completions($string [, $package])>
+
+Find a list of completions for C<$string>; if C<$string> has no
+package prefixes, C<$package> may specify a package in which to look.
+Completion operates on word subparts separated by [:_], so
+e.g. "S:m_w" completes to "Sepia::my_walksymtable".
 
 =cut
 
@@ -52,14 +57,17 @@ sub completions
                     : $pfx eq '%' ? 'HASH'
                     : undef);
         map {
-            s/^::/$pfx/;$_
+            s/^(?::*main)?::/$pfx/;$_
         } grep {
             !$type || defined(*{$_}{$type})
         } _completions('::', @nameparts);
     }
 }
 
-=item C<location($name)>
+=item C<@locs = location(@names)>
+
+Return a list of [file, line, name] triples, one for each function
+name in C<@names>.
 
 =cut
 
@@ -94,7 +102,11 @@ sub location
     } @_
 }
 
-=item C<apropos($name [, $is_regex])>
+=item C<@matches = apropos($name [, $is_regex])>
+
+Search for function C<$name>, either in all packages or, if C<$name>
+is qualified, only in one package.  If C<$is_regex> is true, the
+non-package part of C<$name> is a regular expression.
 
 =cut
 
@@ -122,7 +134,7 @@ sub apropos
         my_walksymtable {
             push @ret, "$stash$_" if /$findre/;
         } '::';
-        map { s/^:://;$_ } @ret;
+        map { s/^(?::*main)?:://;$_ } @ret;
     }
 }
 
@@ -138,7 +150,7 @@ sub my_walksymtable(&*)
     _walk($st);
 }
 
-=item C<mod_subs($pack)>
+=item C<@names = mod_subs($pack)>
 
 Find subs in package C<$pack>.
 
@@ -154,7 +166,7 @@ sub mod_subs
     }
 }
 
-=item C<mod_decls($pack)>
+=item C<@decls = mod_decls($pack)>
 
 Generate a list of declarations for all subroutines in package
 C<$pack>.
@@ -174,7 +186,7 @@ sub mod_decls
     return wantarray ? @ret : join '', @ret;
 }
 
-=item C<module_info($module, $type)>
+=item C<$info = module_info($module, $type)>
 
 Emacs-called function to get module information.
 
@@ -198,6 +210,47 @@ sub module_info($$)
     if ($info) {
         return $info->$func;
     }
+}
+
+=item C<$file = mod_file($mod)>
+
+Find the likely file owner for module C<$mod>.
+
+=cut
+
+sub mod_file
+{
+    my $m = shift;
+    $m =~ s/::/\//g;
+    while ($m && !exists $INC{"$m.pm"}) {
+        $m =~ s#(?:^|/)[^/]+$##;
+    }
+    $m ? $INC{"$m.pm"} : undef;
+}
+
+######################################################################
+## XXX: this is the only part that depends on Emacs:
+
+{ package EL; use Emacs::Lisp; }
+
+=item C<$func = emacs_warner($bufname)>
+
+Create a function that will insert its arguments into Emacs buffer
+C<$bufname>.  Useful as a C<$SIG{__WARN__}> handler.
+
+=cut
+
+sub emacs_warner
+{
+    my $buf = shift;
+    $buf = EL::get_buffer_create($buf);
+    return sub {
+        my $msg = "@_";         # can't be inside EL::save_current_buffer
+        EL::save_current_buffer {
+            EL::set_buffer($buf);
+            EL::insert($msg);
+        };
+    };
 }
 
 1;
