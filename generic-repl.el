@@ -359,6 +359,14 @@ after the last prompt to the end of buffer."
     (unless (repl-at-prompt-end-p)
       (goto-char origin))))
 
+(defmacro with-lexical-bindings (variables &rest body)
+  "Execute BODY with VARIABLES in lexical scope."
+  `(lexical-let ,(mapcar (lambda (variable) (list variable variable))
+                         variables)
+     ,@body))
+
+(put 'with-lexical-bindings 'lisp-indent-function 1)
+
 (defun repl-search-property-change-fn (prop &optional backward)
   (with-lexical-bindings (prop)
     (if backward 
@@ -393,7 +401,8 @@ entered, or if prefix argument is suppled."
      (goto-char repl-input-end-mark)
      (insert "\n")
      (repl-send-input))
-    (t (repl-newline-and-indent) (message "[input not complete]"))))
+    (t (repl-newline-and-indent);;  (message "[input not complete]")
+       )))
 
 (defun repl-input-complete-p (beg end)
   (if (fboundp repl-input-complete-func)

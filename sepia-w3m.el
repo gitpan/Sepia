@@ -75,11 +75,13 @@
 ;;;###autoload
 (defun sepia-w3m-perldoc-this (obj &optional mod type)
   "View perldoc for module at point."
-  (interactive (multiple-value-list (sepia-ident-at-point)))
-  (let ((mod (or mod (fourth (car
+  (interactive (butlast (sepia-ident-at-point) 1))
+  (let ((mod (if (eq type 'module)
+		 mod
+		 (or mod (fourth (car
 			      (if (eq type 'variable)
 				  (xref-var-defs obj)
-				  (xref-defs obj mod)))))))
+				  (xref-defs obj mod))))))))
     (when mod
       (w3m-perldoc mod)
       (when (and obj (not (eq type 'module))
@@ -87,6 +89,23 @@
 		  (concat "^\\Sw*\\<" obj "\\>") nil t))
 	(beginning-of-line)
 	(recenter)))))
+
+(defun sepia-module-list ()
+  (interactive)
+  (let ((file "/tmp/modlist.html"))
+    (unless (file-exists-p file)
+      (with-temp-buffer
+	(insert "use ExtUtils::Installed;
+
+print \"<html><body><ul>\";
+for (sort ExtUtils::Installed->new->modules) {
+    print qq{<li><a href=\"about://perldoc/$_\">$_</a>};
+}
+print \"</ul></body></html>\n\";
+")
+	(shell-command-on-region (point-min) (point-max)
+				 (concat "perl > " file))))
+    (w3m-find-file file)))
 
 (provide 'sepia-w3m)
 
