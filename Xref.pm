@@ -1,6 +1,6 @@
 package Devel::Xref;
 
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 =head1 NAME
 
@@ -112,6 +112,7 @@ sub UNKNOWN { ["?", "?", "?"] }
 
 my @pad;			# lexicals in current pad
 				# as ["(lexical)", type, name]
+my @padval;
 our %done;			# keyed by $$op: set when each $op is done
 my $top = UNKNOWN;		# shadows top element of stack as
 				# [pack, type, name] (pack can be "(lexical)")
@@ -122,7 +123,10 @@ our @todo = ();			# List of CVs that need processing
 
 our $DEBUG = 0;
 sub dprint {
-    print STDERR "@_" if $DEBUG;
+    my $type = shift;
+    my $res = "@_";
+    $res =~ s/%//g;
+    print STDERR "@_" if $DEBUG =~ /$type/;
 }
 
 my %code = (intro => "i", used => "",
@@ -130,28 +134,40 @@ my %code = (intro => "i", used => "",
 	    formdef => "f", meth => "->");
 
 
-# Options
-my ($debug_op, $debug_top, $nodefs, $raw);
+=item C<guess_module_file($pack, $ofile)>
 
-# XXX: it turns out that rooting around trying to figure out the file
-# ourselves is more reliable than what we grab from the op.
+XXX: it turns out that rooting around trying to figure out the file
+ourselves is more reliable than what we grab from the op.  Are we
+doing this wrong?
+
+=cut
+
 sub guess_module_file {
     my ($pack, $ofile) = @_;
     my $file;
+
+    # XXX: is this why we get the bogus defs?
+    return undef if $ofile =~ /Exporter\.pm$/;
+    # Try for standard translation in %INC:
+    (my $fn = $pack) =~ s/::/\//g;
+    if (exists $INC{"$fn.pm"}) {
+	return $INC{"$fn.pm"};
+    }
+
+    # Try what they told us:
     return $ofile if -f $ofile;
 
-    if (exists  $module_files{$pack}) {
-	my $m = (keys %{$module_files{$pack}})[0];
-	return $m if $m =~ /\Q$ofile\E/;
+    # Try our earlier guess of a module file:
+    if (exists $module_files{$pack}
+	&& scalar(keys %{$module_files{$pack}}) == 1) {
+	my ($m) = grep /\Q$ofile\E/, keys %{$module_files{$pack}};
+	return $m if $m;
     }
 
-    (my $mod = $pack) =~ s|::|/|g;
-    while ($mod && !$file) {
-	$file ||= $INC{"$mod.pm"};
-	$mod =~ s|/?[^/]+$||;
+    # Try "parent" packages:
+    while ($fn =~ s|/?[^/]+$|| && !$file) {
+	$file ||= $INC{"$fn.pm"};
     }
-
-    $file ||= $ofile;		# okay, we failed.
 
     if ($file && $file !~ /^\//) {
 	$file = abs_path($file);
@@ -167,7 +183,7 @@ sub guess_module_file {
 # package names, but this will fix it for now.
 sub realpack {
     my $p = shift;
-    if (!defined $p || $p eq '?') {
+    if (!defined $p || $p eq '?' || $p eq '(method)') {
 	return undef;
     } elsif ($p eq '') {
 	return 'main';
@@ -189,123 +205,91 @@ sub split_name {
     ($p, $s);
 }
 
-# Add an item to a list of xref locations only if no item with that
-# same location already exists (XXX: should use a hash for this?)
-sub add_use {
-    my ($l, $e, $file, $line) = @_;
-    push @{$_[0]}, $e unless grep {
-	$_->{line} == $line && $_->{file} eq $file
-    } @$l;
-}
-
-# Add an item only if no item with the same package and file exists.
-sub add_def {
-    my ($l, $e, $file, $line, $pack) = @_;
-    push @{$_[0]}, $e unless grep {
-	if ($_->{file} eq $file && $pack eq $_->{package}) {
-#	    $_->{line} = $line if $line < $_->{line};
-	    1;
-	}
-    } @$l;
-}
-
 sub process {
     my ($var, $event) = @_;
     my ($pack, $type, $name) = @$var;
-    my $pack = realpack($pack);
-    dprint "Processing $event: @$var ($subname)";
+    $pack = realpack($pack);
+    dprint 'loud', "Processing $event: @$var ($subname)";
     if ($type eq "*") {
 	if ($event eq "used" || $event eq 'set') {
 	    return;
 	} elsif ($event eq "subused") {
 	    $type = "&";
+	} elsif ($event eq "meth") {
+	    $type = '->';
 	}
     }
     $type =~ s/(.)\*$/$1/g;
     $file = guess_module_file($pack, $file);
     if (defined($file)) {
 	if ($pack) {
-	    $module_files{$pack}{$file} = 1;
-	    $file_modules{$file}{$pack} = 1;
+	    $module_files{$pack}{$file}++;
+	    $file_modules{$file}{$pack}++;
 	}
     }
 
     if (($type eq '&' || $type eq '->') && $subname ne '(definitions)') {
 	# Handle caller/callee relations
 	my ($spack, $sname) = split_name($subname);
+	# XXX: this is gross, but otherwise Expoerter seems to fool us.
+	if ($file && !exists $def{$sname} || !exists $def{$sname}{$spack}) {
+	    $def{$sname}{$spack} = { file => $file, line => undef };
+	}
 
-	add_use($call{$name},
-		{ file => $file,
-		  sub => $sname,
-		  sub_package => $spack,
-		  package => $pack,
-		  line => $line
-		},
-		$file, $line);
+	push @{$call{$name}{$pack}},
+	{ # file => $file,	# This is actually $sname's file...
+	  sub => $sname,
+	  package => $spack,
+	  line => $line
+	};
 
-	push @{$callby{$sname}},
-	{ sub => $name,
-	  sub_package => $pack,
-	  package => $spack
-	} unless grep {
-	    $_->{sub} eq $name
-		&& $_->{sub_package} eq $pack
-		    && $_->{package} eq $spack
-		} @{$callby{$sname}};
+	push @{$callby{$sname}{$spack}}, { sub => $name, package => $pack };
     } elsif ($type eq 's' || $subname eq '(definitions)') {
 	# Handle definition
-	my $l = $line;
-	my $obj = { file => $file,
-		    sub => $name,
-		    package => $pack,
-		    line => $l };
-	add_use($module_subs{$pack}, $obj, $file, $l, $pack);
-	dprint "Adding definition for $name at $file:$l";
-	add_def($def{$name}, $obj, $file, $l, $pack);
+	if ($file) {
+	    my $obj = { file => $file, line => $line };
+	    $module_subs{$pack}{$name} = $obj;
+	    $def{$name}{$pack} = $obj;
+	    dprint 'def', "$pack\::$name defined at $line\n";
+	}
     } elsif ($name !~ /^[\x00-\x1f^] | ^\d+$ | ^[\W_]$
 		       | ^(?:ENV|INC|STD(?:IN|OUT|ERR)|SIG)$ /x
 	     && realpack($pack)) {
 	# Variables, but ignore specials and lexicals
 	my ($spack, $sname) = split_name($subname);
 	if ($event eq 'intro') {
-	    add_def $var_def{$name},
+	    $var_def{$name}{$pack} =
 	    { file => $file,
 	      package => $spack,
 	      line => $line,
-	      sub => $sname
-	    },
-		$file, $line, $pack;
+	      sub => $sname,
+	    };
 	} elsif ($event eq 'used' || $event eq 'set') {
-	    add_use $var_use{$name},
+	    push @{$var_use{$name}{$pack}},
 	    { file => $file,
 	      package => $spack,
 	      line => $line,
 	      sub => $sname,
 	      assign => ($event eq 'set'),
-	    },
-		$file, $line;
+	    };
 	} else {
-	    dprint "Ignoring var event $event";
+	    dprint 'ignore', "Ignoring var event $event";
 	}
+    } else {
+	dprint 'ignore', "Ignoring $type event $event";
     }
 }
 
 # Because the CV's line number points to the end of the sub, we guess
 # a line number based on the first pp_nextstate seen in the sub.
+# XXX: unused for now -- fix these up later.
 sub update_line_number {
     my ($pack, $name) = split_name($subname);
     my $found;
     my $l = $line - 1; # because we usually see "sub foo {\n    first_stmt...}"
-    if ($pack && exists $def{$name}) {
-	for (@{$def{$name}}) {
-	    if ($_->{package} eq $pack) {
-		if ($l < $_->{line}) {
-		    $_->{line} = $l;
-		}
-		$found = 1;
-		last;
-	    }
-	}
+    if ($pack && exists $def{$name} && exists $def{$name}{$pack}
+	&& $l < $def{$name}{$pack}{line}) {
+	$def{$name}{$pack}{line} = $l;
     }
 }
 
@@ -313,6 +297,7 @@ sub load_pad {
     my $padlist = shift;
     my ($namelistav, $vallistav, @namelist, $ix);
     @pad = ();
+    @padval = ();
     return if class($padlist) eq "SPECIAL";
     ($namelistav,$vallistav) = $padlist->ARRAY;
     @namelist = $namelistav->ARRAY;
@@ -333,6 +318,7 @@ sub load_pad {
 	    $pad[$ix] = [$valsv->STASH->NAME, "*", $valsv->NAME];
 	}
     }
+    @padval = $vallistav->ARRAY;
 }
 
 sub xref {
@@ -340,8 +326,6 @@ sub xref {
     my $op;
     for ($op = $start; $$op; $op = $op->next) {
 	last if $done{$$op}++;
-	warn sprintf("top = [%s, %s, %s]\n", @$top) if $debug_top;
-	warn peekop($op), "\n" if $debug_op;
 	my $opname = $op->name;
 	if ($opname =~ /^(or|and|mapwhile|grepwhile|range|cond_expr)$/) {
 	    xref($op->other);
@@ -378,7 +362,7 @@ sub xref_object {
     local (@todo, %done);
     my $cv = svref_2object($cvref);
     xref_cv($cv);
-    dprint "todo = (@todo)";
+    dprint 'todo', "todo = (@todo)";
     my $gv = $cv->GV;
     process([$gv->STASH->NAME, '&', $gv->NAME], 'subdef');
 }
@@ -397,18 +381,9 @@ sub pp_nextstate {
     $file = $op->file;
     die "pp_nextstate: $file" if $file =~ /::/;
     $line = $op->line;
-    update_line_number;
+#    update_line_number;
     $top = UNKNOWN;
 }
-
-sub pp_padsv {
-    my $op = shift;
-     $top = $pad[$op->targ];
-#     process($top, $op->private & OPpLVAL_INTRO ? "intro" : "used");
-}
-
-sub pp_padav { pp_padsv(@_) }
-sub pp_padhv { pp_padsv(@_) }
 
 sub use_type($) {
     my ($op) = @_;
@@ -421,6 +396,15 @@ sub use_type($) {
 	'used';
     }
 }
+
+sub pp_padsv {
+    my $op = shift;
+     $top = $pad[$op->targ];
+#     process($top, $op->private & OPpLVAL_INTRO ? "intro" : "used");
+}
+
+sub pp_padav { pp_padsv(@_) }
+sub pp_padhv { pp_padsv(@_) }
 
 sub deref {
     my ($op, $var, $as) = @_;
@@ -464,6 +448,8 @@ sub pp_gv {
     process($top, use_type $op);
 }
 
+my $lastclass;
+
 sub pp_const {
     my $op = shift;
     my $sv = $op->sv;
@@ -471,26 +457,55 @@ sub pp_const {
     if ($$sv) {
 	$top = [undef, "",
 		(class($sv) ne "SPECIAL" && $sv->FLAGS & SVf_POK)
-		? cstring($sv->PV) : undef];
+		? $sv->PV : undef];
     }
     else {
 	$top = $pad[$op->targ];
+	my $pv = $padval[$op->targ];
+	if (class($pv) eq 'PV') {
+	    $pv = $pv->PV;
+	    $lastclass = $pv if class($sv) eq 'SPECIAL'
+		&& ($op->private & 64); # bareword
+	} else {
+	    $pv = "XXX: ".class($pv);
+	}
+	dprint 'method', "blah constant ".$op->targ." pad = `$top'/`$pv'";
 	$top = UNKNOWN unless $top;
     }
 }
 
 sub pp_method {
     my $op = shift;
-    $top = ["(method)", "->".$top->[1], $top->[2]];
+    $top = [$lastclass || "(method)", "->".$top->[1], $top->[2]];
+    dprint 'method', "pp_method($top->[1])";
+    undef $lastclass;
+}
+
+sub pp_method_named {
+    use Data::Dumper;
+    my $op = shift;
+    my $sv = $op->sv;
+    my $pviv = $padval[$op->targ];
+    if ($pviv && class($pviv) =~ /^PV/) {
+	my $name = $pviv->PV;
+	dprint 'method_named', $op->targ.": $name";
+	undef $top->[2] if $top->[2] eq '?';
+	$top = [$top->[2] || $lastclass || "(method)", '->', $name];
+	undef $lastclass;
+    } else {
+	warn "method_named: wtf: sizeof padval = ".@padval;
+    }
 }
 
 sub pp_entersub {
     my $op = shift;
-    if ($top->[1] eq "m") {
+    if ($top->[1] =~ /^(?:m$|->)/) {
+	dprint 'method', "call to (@$top) from $subname";
 	process($top, "meth");
     } else {
 	process($top, "subused");
     }
+    undef $lastclass;
     $top = UNKNOWN;
 }
 
@@ -518,7 +533,6 @@ sub B::GV::xref {
 
 sub xref_definitions {
     my ($pack, %exclude);
-    return if $nodefs;
     $subname = "(definitions)";
     foreach $pack (qw(B O AutoLoader DynaLoader XSLoader Config DB VMS
 		      strict vars FileHandle Exporter Carp PerlIO::Layer
@@ -551,25 +565,30 @@ sub rebuild {
 
 sub unmention {
     my ($h, $K, $V, $pack) = @_;
-    dprint "Unmentioning $K => $V";
+    dprint 'unmention', "Unmentioning $K => $V";
     while (my ($k, $v) = each %$h) {
-	$h->{$k} =
-	    [grep { $_->{$K} ne $V || !$pack || $pack ne $_->{package} } @$v];
-	delete $h->{$k} unless @{$h->{$k}};
+	while (my ($k2, $v2) = each %$v) {
+	    if (ref $v2 eq 'ARRAY') {
+		$v->{$k2} = [grep {
+		    $_->{$K} ne $V || !$pack || $pack ne $_->{package}
+		} @$v2];
+		delete $v->{$k2} unless @{$v->{$k2}};
+	    } else {
+		delete $v->{$k2} if $k2 eq $V;
+	    }
+	}
+	delete $h->{$k} unless keys %{$h->{$k}};
     }
 }
 
 sub unmention_sub {
     my ($h, $sub, $pack) = @_;
-    dprint "Unmentioning sub $sub";
-    if (exists $h->{$sub}) {
-	if ($pack) {
-	    my $hs = $h->{$sub};
-	    $h->{$sub} = $hs = [ grep { $_->{package} ne $pack } @$hs ];
-	    delete $h->{$sub} unless @$hs;
-	} else {
-	    delete $h->{$sub};
-	}
+    dprint 'unmention', "Unmentioning $pack\::$sub";
+    if ($pack) {
+	delete $h->{$sub}{$pack};
+	delete $h->{$sub} unless keys %{$h->{$sub}};
+    } else {
+	delete $h->{$sub};
     }
 }
 
@@ -580,18 +599,19 @@ Forget that C<$func> was defined.
 =cut
 
 sub forget {
-#    my ($obj, $pack) = @_;
+    my ($obj, $pack) = @_;
     unmention_sub \%def, @_;
     unmention_sub \%callby, @_;
     unmention \%call, 'sub', @_;
-    unmention \%module_subs, 'sub', @_;
+    delete $module_subs{$pack}{$obj};
+    delete $module_subs{$pack} unless keys %{$module_subs{$pack}};
     unmention \%var_use, 'sub', @_;
     unmention \%var_def, 'sub', @_;
 }
 
 =item C<redefined($func [, $pack])>
 
-Recompute xref info for each of of C<@funcs>.
+Recompute xref info for C<$func>, or C<$pack::$func> if C<$pack> given.
 
 =cut
 
@@ -607,19 +627,38 @@ sub redefined {
     }
 }
 
+=item C<mod_redefined($m)>
+
+Recompute Xref information for module C<$m>.
+
+=cut
+
+sub mod_redefined {
+    my $mod = shift;
+    redefined $_, $mod for keys %{$module_subs{$mod}};
+}
+
+######################################################################
+# Apropos and definition-finding:
+
 sub _ret_list {
-    my ($l, $mod) = @_;
+    my ($l, $mod, $sub) = @_;
+    my @mod;
+    if ($mod) {
+	@mod = ($mod);
+    } else {
+	@mod = keys %$l;
+    }
     my @r = map {
-	[ @{$_}{qw(file line sub package)} ]
-    } @$l;
-    # Remove Exporter if we've got more than one answer, since it's
-    # bogus.
-#     if (@r > 1) {
-	@r = grep { $_->[0] !~ /Exporter\.pm$/ } @r;
-	if ($mod) {
-	    @r = grep { !$_->[3] || $_->[3] eq $mod } @r;
-	}
-#     }
+	my $lm = $l->{$_};
+	$mod = $_;
+	map {
+	    [$_->{file} || undef, $_->{line}, $_->{sub} || $sub,
+	     $_->{package} || $mod ]
+	} (ref($lm) eq 'ARRAY' ? @$lm : $lm);
+    } @mod;
+    @r = grep { $_->[0] !~ /Exporter\.pm$/ } @r
+	unless $mod && $mod eq 'Exporter';
     return wantarray ? @r : \@r;
 }
 
@@ -634,20 +673,6 @@ sub callers {
     return _ret_list $call{$f}, @_;
 }
 
-=item C<callees($func)>
-
-List callees of C<$func>.
-
-=cut
-
-sub callees {
-    my $f = shift;
-    my @r = map {
-	defs($_->{sub})
-    } @{$callby{$f}};
-    return wantarray ? @r : \@r;
-}
-
 =item C<defs($func)>
 
 Find locations where C<$func> is defined.
@@ -655,9 +680,23 @@ Find locations where C<$func> is defined.
 =cut
 
 sub defs {
-    my $f = shift;
+    my ($f, $pack) = @_;
     $f =~ s/.*:://;
-    return _ret_list $def{$f}, @_;
+    return _ret_list $def{$f}, $pack, $f;
+}
+
+=item C<callees($func)>
+
+List callees of C<$func>.
+
+=cut
+
+sub callees {
+    my ($f, $pack) = @_;
+    my @r = map {
+	defs($_->{sub});
+    } ($pack ? @{$callby{$f}{$pack}} : map @$_, values %{$callby{$f}});
+    return wantarray ? @r : \@r;
 }
 
 =item C<var_defs($var)>
@@ -691,9 +730,14 @@ Find locations where C<$var> is assigned to.
 =cut
 
 sub var_assigns {
-    my $v = shift;
-    $v =~ s/.*:://;
-    return _ret_list [ grep $_->{assign},@{$var_use{$v}} ], @_;
+    my ($v, $pack) = @_;
+    if ($v =~ /^(.*)::(.+)$/) {
+	$v = $2;
+	$pack = $1;
+    }
+    return _ret_list [ grep $_->{assign},
+		       $pack ? @{$var_use{$v}{$pack}}
+		       : map @$_, values %{$var_use{$v}} ], $pack;
 }
 
 =item C<mod_subs($pack)>
@@ -718,7 +762,7 @@ sub mod_decls {
     my $pack = shift;
     no strict 'refs';
     my @ret = map {
-	my $sn = $_->[2];
+	my $sn = $_->[3];
 	my $proto = prototype(\&{"$pack\::$sn"});
 	$proto = defined($proto) ? "($proto)" : '';
 	"sub $sn $proto;\n";
@@ -726,7 +770,7 @@ sub mod_decls {
     return wantarray ? @ret : join '', @ret;
 }
 
-=item C<mod_file($mod)>
+=item C<mod_files($mod)>
 
 Find file for module C<$mod>.
 
@@ -779,17 +823,14 @@ sub _apropos {
     };
     if ($mod) {
 	$mod = _apropos_re($mod);
-	@r = map {
+	my %r;
+	for (@r) {
 	    my $sn = $_;
-	    my $xs = $h->{$_};
-	    map {
-		if (!exists($_->{package}) || ($_->{package} =~ /$mod/)) {
-		    ("$_->{package}\::$sn");
-		} else {
-		    ();
-		}
-	    } @$xs;
-	} @r;
+	    for (keys %{$h->{$_}}) {
+		$r{"$_\::$sn"} = 1 if /$mod/;
+	    }
+	}
+	@r = sort keys %r;
     }
     return wantarray ? @r : \@r;
 }

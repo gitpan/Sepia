@@ -70,13 +70,15 @@ BUGS
   This is probably caused by some code passing a string containing a
   "%" as the first argument to `format', either in but I haven't
   tracked it down yet.
-* Function definition lines may all go completely wrong.  Rebuilding
-  the Xref database fixes this.
+* Function definition lines may occasionally all go completely wrong.
+  Rebuilding the Xref database fixes this.
 * The cursor may miss by several lines when jumping to a definition.
   This is hard to fix -- Perl doesn't give exact line numbers for sub
-  defs, so we have to do some minor adjustment and regex-searching,
-  neither of which is flawless.
+  defs, so we have to do some minor regex-searching.
 * `sepia-var-assigns' doesn't work yet -- don't use it.
+* named method calls are (mostly?) detected, but nothing smart is
+  done about packages, so e.g. "new Foo" will result in listings for
+  every instance of "new" in your program.
 
 CREDITS
 =======

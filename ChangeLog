@@ -1,3 +1,23 @@
+2004-04-13  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* sepia.el
+
+2004-04-12  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* sepia.el (sepia-doc-scan-buffer): Make regular expressions a
+	bit better.
+	(sepia-ident-at-point): handle upper-case function and variable
+	names for completion (a bit hacky...).
+	(sepia-install-keys): fix keymap installation.
+
+2004-04-11  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* Xref.pm (guess_module_file): do like Module::Info and trust
+	%INC more than our Xref info.  But don't be _too_ smart about
+	this -- we were picking up lots of bogus exports.
+	(pp_method_named): add support for constant-named methods (cribbed
+	from B::Concise).
+
 2004-04-10  Sean O'Rourke  <seano@cs.ucsd.edu>
 
 	* Xref.pm: update $VERSION to track Sepia release.

@@ -20,32 +20,32 @@
     (cond
       (current-prefix-arg
        (find-file-other-window (car location))
-       (sepia-set-found (list location))
+       (sepia-set-found (list location) 'function)
        (sepia-next))
       ((widget-get widget :sepia-shown-p)
        (save-excursion
 	 (end-of-line)
-	 (delete-region (point)
-			(+ 1 (point) (widget-get widget :sepia-shown-p)))
+	 (let ((inhibit-read-only t))
+	   (delete-region (point)
+			  (+ 1 (point) (widget-get widget :sepia-shown-p))))
 	 (widget-put widget :sepia-shown-p nil)))
       (t
-       (let ((str (or (apply #'sepia-extract-def location) "(not found)")))
-	 (save-excursion
-	   (end-of-line)
-	   (widget-put widget :sepia-shown-p (length str))
-	   (widget-insert "\n" str)))))))
+       (let ((str (apply #'sepia-extract-def location)))
+	 (if str
+	     (save-excursion
+	       (end-of-line)
+	       (widget-put widget :sepia-shown-p (length str))
+	       (widget-insert "\n" str))
+	     (message "(not found)")))))))
 
 (defun sepia-tree-node-cb (widget &rest blah)
   (let ((func (widget-get widget :sepia-func)))
     (or (widget-get widget :args)
 	(let ((children
 	       (sort
-	       (funcall func widget)
-	       (lambda (a b)
-		 (or (string< (fourth a) (fourth b))
-		     (and (string= (fourth a) (fourth b))
-			  (string< (third a) (third b)))))
-	       )))
+		(sepia-uniquify (funcall func widget))
+		#'sepia-tree-def-order
+		)))
 	  (if children
 	      (mapcar
 	       (lambda (x) (apply #'sepia-tree-node func x))
@@ -88,18 +88,22 @@ will, given a widget, generate its children."
   (if defs
       (lexical-let ((func func))
 	(sepia-tree-tidy-buffer bufname)
-	(dolist (x defs)
-	  (apply #'widget-create
-		 (apply #'sepia-tree-node
-			(lambda (widget)
-			  (funcall func (widget-get widget :sepia-obj)
-				   (widget-get widget :sepia-mod)))
-			x)))
-	(use-local-map (copy-keymap widget-keymap))
-	(sepia-install-keys)
-	(goto-char (point-min))
-	(message "Type \\C-h m for usage information"))
-      (message "Can't find function %s::%s" mod obj)))
+	(with-current-buffer bufname
+	  (dolist (x defs)
+	    (apply #'widget-create
+		   (apply #'sepia-tree-node
+			  (lambda (widget)
+			    (funcall func (widget-get widget :sepia-obj)
+				     (widget-get widget :sepia-mod)))
+			  x)))
+	  (use-local-map (copy-keymap widget-keymap))
+;;	  (local-set-key "\M-." sepia-keymap)
+	  (sepia-install-keys)
+	  (let ((view-read-only nil))
+	    (toggle-read-only 1))
+	  (goto-char (point-min))
+	  (message "Type C-h m for usage information")))
+      (message "No items for %s" bufname)))
 
 (defun sepia-callee-tree (obj mod)
   "Create a tree view of a function's callees.
@@ -126,13 +130,31 @@ prefix argument, RET instead visits in another window."
 			     defs
 			     (format "*%s::%s callers*" mod obj))))
 
+(defun sepia-uniquify (xs &optional test)
+  (let ((h (make-hash-table :test (or test #'equal))))
+    (dolist (x xs)
+      (puthash x nil h))
+    (hash-table-keys h)))
+
+(defun sepia-tree-def-order (a b)
+  (or (string< (fourth a) (fourth b))
+      (and (string= (fourth a) (fourth b))
+	   (string< (third a) (third b)))))
+
 (defun sepia-module-callee-tree (mod)
   "Display a callee tree for each of MOD's subroutines.
 
 Pressing RET on a function's name displays its definition.  With
 prefix argument, RET instead visits in another window."
   (interactive (list (sepia-interactive-arg 'module)))
-  (let ((defs (mapcan #'xref-defs (xref-apropos "" mod))))
+  (let ((defs (sort
+	       (sepia-uniquify
+		(remove-if (lambda (x)
+			     (and (fourth x)
+				  (not (string= (fourth x) mod))))
+			   (mapcan (lambda (x) (xref-defs x mod))
+				   (xref-apropos "" (concat "^" mod "$")))))
+	       #'sepia-tree-def-order)))
     (sepia-build-tree-buffer #'xref-callees defs (format "*%s subs*" mod))))
 
 (provide 'sepia-tree)

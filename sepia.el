@@ -29,7 +29,7 @@ Without this, code often will not parse; with it, evaluation may
 be a bit less responsive.  Note that since this only includes
 subs from the evaluation package, it may not always work.")
 
-(defvar sepia-prefix-key (kbd "\M-.")
+(defvar sepia-prefix-key "\M-."
   "* Prefix for functions in ``sepia-keymap''.")
 
 (defvar sepia-initializer
@@ -42,21 +42,22 @@ use Data::Dumper;
 
 sub _module_info($)
 {
-    my $m = shift;
-    my $ret;
+    my ($m, $func) = @_;
+    my $info;
     if (-f $m) {
-	$ret = Module::Info->new_from_file($m);
+	$info = Module::Info->new_from_file($m);
     } else {
 	(my $file = $m) =~ s|::|/|g;
 	$file .= '.pm';
 	if (exists $INC{$file}) {
-	    $ret = Module::Info->new_from_loaded($m);
+	    $info = Module::Info->new_from_loaded($m);
 	} else {
-	    $ret = Module::Info->new_from_module($m);
+	    $info = Module::Info->new_from_module($m);
 	}
     }
-#    die \"Can't find module ``$m''\\n\" unless $ret;
-    $ret;
+    if ($info) {
+        return $info->$func;
+    }
 }
 
 1;
@@ -81,10 +82,10 @@ sub _module_info($)
 might want to bind your keys, which works best when bound to
 `\\M-.'.")
 
-(defun sepia-install-keys ()
+(defun sepia-install-keys (&optional map)
 "Install Sepia bindings in the current local keymap."
   (interactive)
-  (let ((map (current-local-map)))
+  (let ((map (or map (current-local-map))))
     (define-key map sepia-prefix-key sepia-keymap)
     (define-key map "\M-," 'sepia-next)
     (define-key map "\C-\M-x" 'sepia-eval-defun)
@@ -115,8 +116,11 @@ intended to shadow similar functionality in elisp-mode:
 "
   (interactive)
 
-  ;; Load perl defs:
-  (perl-eval "1" 'void-context)	   ;to make sure interpreter's running
+  (ignore-errors
+    (kill-process "perl")
+    (setq perl-interpreter nil))
+  (epl-init)
+    ;; Load perl defs:
   (perl-eval sepia-initializer 'void-context)
 
   ;; Create glue wrappers for Module::Info funcs.
@@ -154,9 +158,10 @@ Does not require loading.")
 	       (var-assigns . "Find all assignments to a variable.")
 	       (var-uses . "Find all uses of a variable.")
 
+	       (mod-redefined . "Rebuild Xref information for a given package.")
 	       (mod-subs . "Find all subs defined in a package.")
-	       (mod-files . "Find the file defining a module.")
-	       (mod-decls . "Generate declarations for subs in a module.")
+	       (mod-files . "Find the file defining a package.")
+	       (mod-decls . "Generate declarations for subs in a package.")
 	       (guess-module-file . "Guess file corresponding to module.")
 	       (file-modules . "List the modules defined in a file.")))
     (define-xref-function (car x) (cdr x)))
@@ -164,6 +169,8 @@ Does not require loading.")
   (add-hook 'cperl-mode-hook 'sepia-doc-update)
   (add-hook 'sepia-repl-hook 'sepia-repl-init-syntax)
   (add-hook 'sepia-repl-hook 'sepia-install-eldoc)
+  (if (boundp 'cperl-mode-map)
+      (sepia-install-keys cperl-mode-map))
   (sepia-rebuild)
   (sepia-interact))
 
@@ -176,12 +183,10 @@ Does not require loading.")
 	     ,doc
 	     (apply #'perl-call ,pl-name 'list-context args)))))
 
-(defun define-modinfo-function (name doc)
+(defun define-modinfo-function (name &optional doc)
 "Define a lisp mirror for a function from Module::Info."
   (let ((name (intern (format "sepia-module-%s" name)))
-	(pl-func
-	 (perl-eval (format "sub { _module_info(shift)->%s }" (perl-name name))
-		    'list-context))
+	(pl-func (perl-name name))
 	(full-doc (concat (or doc "") "
 
 This function uses Module::Info, so it does not require that the
@@ -190,7 +195,8 @@ module in question be loaded.")))
     (eval `(defun ,name (mod)
 	     ,full-doc
 	     (interactive (list (sepia-interactive-arg 'module)))
-	     (let ((res (perl-call ,pl-func 'scalar-context mod)))
+	     (let ((res (perl-call "_module_info" 'scalar-context
+				   mod ,pl-func)))
 	       (if (interactive-p)
 		   (message "%s" res)
 		   res))))))
@@ -262,17 +268,18 @@ symbol at point."
 				  (and (string= (car a) (car b))
 				       (< (second a) (second b)))))))
       (destructuring-bind (file line name &rest blah) loc
-	(let ((str "..."))
-	  (ifa (find-buffer-visiting file)
-	       (with-current-buffer it
-		 (ifa sepia-found-refiner
-		      (funcall it line name)
-		      (goto-line line))
-		 (message "line for %s was %d, now %d" name line
-			  (line-number-at-pos))
-		 (setq line (line-number-at-pos))
-		 (setq str (buffer-substring (my-bol-from (point))
-					     (my-eol-from (point))))))
+	(let ((str (ifa (find-buffer-visiting file)
+			(with-current-buffer it
+			  (ifa sepia-found-refiner
+			       (funcall it line name)
+			       (goto-line line))
+			  (message "line for %s was %d, now %d" name line
+				   (line-number-at-pos))
+			  (setq line (line-number-at-pos))
+			  (concat "\n    "
+				  (buffer-substring (my-bol-from (point))
+						    (my-eol-from (point)))))
+			"...")))
 	  (insert (format "%s:%d:%s\n" (abbreviate-file-name file) line str)))))
     (grep-mode)
     (goto-char (point-min))))
@@ -492,32 +499,41 @@ rebuilds the database unless a prefix argument is given."
 
 (defun sepia-ident-at-point ()
   "Find the perl identifier at point, returning
-\(values object module type), where type is either 'variable,
-'function, or 'module."
+\(values OBJECT MODULE TYPE), where TYPE is either 'variable,
+'function, or 'module.  If TYPE is 'module, OBJ is the last
+component of the module name."
   (let ((cperl-under-as-char nil)
-	(case-fold-search nil))
+	(case-fold-search nil)
+	var-p module-p modpart objpart)
     (condition-case c
 	(destructuring-bind (sbeg . send) (bounds-of-thing-at-point 'symbol)
 	  (destructuring-bind (wbeg . wend) (or (bounds-of-thing-at-point 'word)
 						(cons (point) (point)))
 	    (if (member (char-before send) '(?> ?\ ))
 		(signal 'wrong-number-of-arguments 'sorta))
-	    (if (member (char-after wbeg) '(?@ ?$ ?%))
-		(incf wbeg))
-	    (if (member (char-after sbeg) '(?@ ?$ ?%))
-		(incf sbeg))
-	    (if (save-excursion (goto-char wbeg) (looking-at "[A-Z]"))
-		(values nil (buffer-substring sbeg send) 'module)
-		(values (buffer-substring wbeg wend)
-			(if (= sbeg wbeg) nil
-			    (buffer-substring sbeg
-					      (if (= (char-before (1- wbeg))
-							 ?\:)
-						  (- wbeg 2)
-						  (1- wbeg))))
-			(if (member (char-before sbeg) '(?@ ?$ ?%))
-			    'variable
-			    'function)))))
+	    (setq var-p
+		  (or (member (char-before wbeg) '(?@ ?$ ?%))
+		      (member (char-before sbeg) '(?@ ?$ ?%))))
+	    (setq module-p
+		  (save-excursion (goto-char wbeg) (looking-at "[A-Z]")))
+	    (setq modpart 
+		  (if (= sbeg wbeg)
+		      nil
+		      (buffer-substring sbeg
+					(if (= (char-before (1- wbeg)) ?\:)
+					    (- wbeg 2)
+					    (1- wbeg)))))
+	    (setq objpart (buffer-substring wbeg wend))
+	    (values (if module-p
+			(list objpart modpart (if var-p 'variable 'function))
+			objpart)
+		    (if module-p
+			(buffer-substring sbeg send)
+			modpart)
+		    (cond
+		      (module-p 'module)
+		      (var-p 'variable)
+		      (t 'function)))))
       (wrong-number-of-arguments (values nil nil nil)))))
 
 (defun sepia-complete-symbol ()
@@ -535,13 +551,21 @@ The function is intended to be bound to \\M-TAB, like
   (interactive)
   (multiple-value-bind (obj mod type) (sepia-ident-at-point)
     ;; Complete on empty only if we hit tab twice.
-    (if (and type (or (not (and obj (string= obj "")))
+    (if (and type (or (not (and obj (equal obj "")))
 		      (eq last-command 'repl-complete-symbol)))
       (let ((completions
-	     (ecase type
-	       (function (xref-apropos (concat "^" obj) mod))
-	       (variable (xref-var-apropos (concat "^" obj) mod))
-	       (module (xref-mod-apropos (concat "^" mod)))))
+	     (progn
+	       (cond
+		 ((and (eq type 'module)
+		       (or (xref-mod-apropos (concat "^" mod))
+			   (and (setq type (third obj)
+				      mod (second obj)
+				      obj (car obj))
+				nil))))
+		 ((eq type 'function)
+		  (xref-apropos (concat "^" obj) mod))
+		 ((eq type 'variable)
+		  (xref-var-apropos (concat "^" obj) mod)))))
 	    (eow (or (and (thing-at-point 'word) (end-of-thing 'word))
 		     (point)))
 	    (thing-len (length (sepia-thing-at-point 'symbol))))
@@ -635,12 +659,13 @@ prefix arg, replace the region with the result."
 (defun sepia-guess-package (sub &optional file)
   "Guess which package SUB is defined in."
   (let ((defs (xref-defs sub)))
-    (cond
-      ((and (= (length defs) 1)
-	    (or (not file) (equal (caar defs) file)))
-       (fourth (car defs)))
-      ((and file (fourth (find-if (lambda (x) (equal (car x) file)) defs))))
-      (t (or (car (xref-file-modules (buffer-file-name))) "main")))))
+    (or (and (= (length defs) 1)
+	     (or (not file) (equal (caar defs) file))
+	     (fourth (car defs)))
+	(and file
+	     (fourth (find-if (lambda (x) (equal (car x) file)) defs)))
+	(car (xref-file-modules file))
+	(sepia-buffer-package))))
 
 (defun sepia-eval-defun ()
   "Re-evaluate the current sub in the appropriate package, and
@@ -662,15 +687,17 @@ rebuild its Xrefs."
 			   (apply #'concat (xref-mod-decls sepia-eval-package))
 			   body)
 			  body))
-	  (xref-redefined sub sepia-eval-package))))))
+	  (xref-redefined sub sepia-eval-package)
+	  (message "Defined %s" sub))))))
 
 (defun sepia-extract-def (file line obj mod)
   (with-current-buffer (find-file-noselect (expand-file-name file))
     (save-excursion
       (funcall (sepia-refiner 'function) line obj)
       (beginning-of-line)
-      (buffer-substring (point)
-			(progn (end-of-defun) (point))))))
+      (when (looking-at (concat "^\\s *sub\\>.*\\<" obj "\\>"))
+	(buffer-substring (point)
+			  (progn (end-of-defun) (point)))))))
 
 (defun sepia-eval-buffer (&optional no-update)
   "Re-evaluate the current file; unless prefix argument is given,
@@ -798,18 +825,23 @@ the only function that requires EPL (the rest can use Pmacs)."
 				 0 (position ?. (match-string 1))))
 			s2))))
 	    (cond
-	      ((string-match "^[%$@]\\([^( ]+\\)" s2)
-	       (list 'variable (match-string-no-properties 1 s2) longdoc))
-	      ((string-match "^\\([^( ]+\\)" s2)
+	      ;; e.g. "C<foo(BLAH)>" or "$x = $y->foo()"
+	      ((string-match "\\(\\sw+\\)\\s *\\($\\|(\\)" s2)
 	       (list 'function (match-string-no-properties 1 s2)
-		     (or (and (equal s2 (match-string 1 s2)) longdoc) s2)))))
+		     (or (and (equal s2 (match-string 1 s2)) longdoc) s2)))
+	      ;; e.g. "$x -- this is x" (note: this has to come second)
+	      ((string-match "^[%$@]\\([^( ]+\\)" s2)
+	       (list 'variable (match-string-no-properties 1 s2) longdoc))))
        collect it)))
 
-(defun sepia-brutish-find-package ()
+(defun sepia-buffer-package ()
   (save-excursion
     (goto-char (point-min))
-    (and (re-search-forward "^\\s *package\\s +\\([^ ;]+\\)" nil t)
-	 (match-string 1))))
+    (or (and (re-search-forward "^\\s *package\\s +\\([^ ;]+\\)" nil t)
+	     (match-string 1))
+	"main")))
+
+(defun sepia-brutish-find-package ()
 
 (defun sepia-doc-update ()
 "Update documentation for a file.  This documentation, taken from
@@ -862,6 +894,47 @@ the only function that requires EPL (the rest can use Pmacs)."
   (if cperl-lazy-installed (cperl-lazy-unstall))
   (eldoc-mode 1)
   (setq eldoc-idle-delay 1.0))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Error jump:
+
+(defun sepia-extract-next-warning (pos &optional end)
+  (when (and (re-search-forward "^\\(.+\\) at \\(.+\\) line \\([0-9]+\\)\\.$"
+				end t)
+	     (not (string= "(eval " (substring (match-string 2) 0 6))))
+    (list (match-string 2)
+	  (read-from-string (match-string 3))
+	  (msg (match-string 1)))))
+
+(defun sepia-goto-error-at (pos)
+  "Visit the source of the error on line at POS (point if called
+interactively)."
+  (interactive "d")
+  (ifa (sepia-extract-warning (my-bol-from pos) (my-eol-from pos))
+       (destructuring-bind (file line msg) it
+	 (find-file file)
+	 (goto-line line)
+	 (message "%s" msg))
+       (error "No error to find.")))
+
+(defun sepia-perl-display-errors (beg end)
+  (interactive "r")
+  (goto-char beg)
+  (loop with msgs = (make-hash-table :test #'equal)
+     for w = (sepia-extract-warning (my-bol-from (point)) end)
+     while w
+     do (destructuring-bind (file line msg) w
+	  (puthash file msgs (cons line msg)))
+     finally
+       (with-current-buffer (get-buffer-create "*perl-warnings*")
+	 (let ((inhibit-read-only t))
+	   (erase-buffer))
+	 (dolist (k (sort (hash-table-keys msgs) #'string<))
+	   (let ((v (gethash k msgs)))
+	     (insert (format "%s:%d:\n%s\n"
+			     (abbreviate-file-name k) (car v) (cdr v)))))
+	 (goto-char (point-min))
+	 (grep-mode))))
 
 (provide 'sepia)
 ;;; sepia.el ends here
