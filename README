@@ -1,21 +1,31 @@
-sepia.el and Devel::Xref
-========================
+DESCRIPTION
+===========
 
-Sorry this isn't a "real" distribution, but it really shouldn't be.
-First, Devel::Xref is largely cut-and-pasted from B::Xref, and the two
-modules should probably be integrated.  Second, it's most useful with
-the Emacs file, and I haven't tracked down how to make MakeMaker
-install that on a "make install".  Given that installation wouldn't be
-automatic anyways, it doesn't seem worthwhile to me to make this a
-distribution.
+Sepia is a set of features to make Emacs a better tool for Perl
+development, including:
+
+    * an interactive prompt (REPL) for evaluating code;
+    * cross-referencing to find and navigate between function and
+      variable definitions and uses;
+    * variable- and function-name completion based on this Xref
+      database.
+    * eldoc support to echo function arguments in the minibuffer
+    * functions to simplify POD browsing with Emacs-w3m
+
+I find Emacs as a software development environment preferable to many
+modern IDEs, particularly when using a richly-supported language like
+Lisp or Emacs Lisp.  Sepia is my attempt to give Perl a similar degree
+of support "in the Emacs way," which represents 40 years' collective
+experience of the software development community.  I have therefore
+tried throughout to use or mimic existing Emacs functionality, rather
+than to create something new.
 
 INSTALLATION
 ============
 
-1) Install Emacs::EPL, Data::Dumper, and Module::Info from CPAN.
-2) place Devel/Xref.pm somewhere in your @INC path (or edit the
-   code below that points to it).
-3) put sepia.el and generic-repl.el somewhere Emacs will find them.
+1) run "perl Makefile.PL; make; make install"
+2) optionally, install the Emacs-w3m package.
+3) put the elisp files somewhere Emacs will find them.
 
 RUNNING
 =======
@@ -24,27 +34,14 @@ In Emacs, type
 
    M-x load-library <ret> sepia <ret>
    M-x sepia-init <ret>
-   M-x sepia-rebuild <ret>
 
-This will give you an Xref database for the EPL process.  To add some
-of your own modules, load them, then type
+This will give you an Xref database for the EPL process, and start the
+REPL.
 
-   M-x perl-eval-buffer <ret>
+Probably the most useful part of the package is the cross-reference
+facility.  In a Perl buffer with Sepia enabled, type
 
-To interact more closely with the Perl process, you can start up a
-read-eval-print loop (REPL) by typing
-    M-x sepia-interact
-
-Alternatively, you can get an interactive Perl scratchpad like the
-*scratch* buffer by typing
-
-   M-x sepia-scratchpad <ret>
-
-then type the relevant "use" statements into this buffer, and evaluate
-them by hitting C-j.  Probably the most useful part of the package is
-the cross-reference facility; type
-
-   M-x sepia- <tab>
+   C-h f sepia-init <ret>
 
 to get a list of functions using it.  In general, the functions will
 look up zero or more source locations, then allow you to cycle
@@ -62,3 +59,14 @@ TODO
 * (Medium) Clean up Perl side.
 * (Hard) Merge with B::Xref.
 * (Medium) Better documentation for Elisp side.
+
+CREDITS
+=======
+
+Sepia would never have been possible without Software Libre, as many
+key components have been stolen and adapted from other packages:
+
+    * generic-repl is taken from Slime;
+    * Devel::Xref is taken from B::Xref;
+    * sepia-w3m is taken from w3m-perldoc;
+

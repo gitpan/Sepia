@@ -21,10 +21,10 @@ Devel::Xref - Generates cross reference database for use by Perl programs.
 
 =head1 DESCRIPTION
 
-L<Devel::Xref> is intended as a programmatic interface to the
+C<Devel::Xref> is intended as a programmatic interface to the
 information supplied by L<B::Xref>.  It is intended to be a component
 for interactive Perl development, with other packages providing a
-friendly interface to the raw information it extracts.  L<B::Xref>
+friendly interface to the raw information it extracts.  C<B::Xref>
 could be seen as an example of this sort of user-level tool, if it
 weren't for the fact that this module was created later, and stole
 most of its code.
@@ -70,8 +70,6 @@ it only picks up local (...) declarations.
 =item C<%module_files>
 
 A map of module names to containing files.
-
-=back
 
 =item C<%file_modules>
 
@@ -536,32 +534,44 @@ sub rebuild {
     1;
 }
 
-=item C<forget(@funcs)>
+sub unmention(%$$$) {
+    my ($h, $K, $V, $pack) = @_;
+    while (my ($k, $v) = each %$h) {
+	$h->{$k} =
+	    [grep { $_->{$K} ne $V || ($pack && $pack ne $_->{package}) } @$v];
+    }
+}
 
-Forget that C<@funcs> were defined.  XXX: this B<really> needs to take
-packages into account.
+sub unmention_sub(%$$) {
+    my ($h, $sub, $pack) = @_;
+    if (exists $h->{$sub}) {
+	if ($pack) {
+	    my $hs = $h->{$sub};
+	    $h->{$sub} = $hs = [ grep { $_->{package} ne $pack } @$hs ];
+	    delete $h->{$sub} unless @$hs;
+	} else {
+	    delete $h->{$sub};
+	}
+    }
+}
+
+=item C<forget($func [, $mod])>
+
+Forget that C<$func> was defined.
 
 =cut
 
-sub unmention(%$$) {
-    my ($h, $K, $V) = @_;
-    while (my ($k, $v) = each %$h) {
-	$h->{$k} = [grep { $_->{$K} ne $V } @$v];
-    }
-}
-
 sub forget {
-    for my $obj (@_) {
-	delete $def{$obj};
-	delete $callby{$obj};
-	unmention %call, 'sub', $obj;
-	unmention %package_sub, 'sub', $obj;
-	unmention %var_use, 'sub', $obj;
-	unmention %var_def, 'sub', $obj;
-    }
+    my ($obj, $pack) = @_;
+    unmention_sub %def, $obj, $pack;
+    unmention_sub %callby, $obj, $pack;
+    unmention %call, 'sub', @_;
+    unmention %package_sub, 'sub', @_;
+    unmention %var_use, 'sub', @_;
+    unmention %var_def, 'sub', @_;
 }
 
-=item C<redefined(@funcs)>
+=item C<redefined($func [, $pack])>
 
 Recompute xref info for each of of C<@funcs>.
 
@@ -569,7 +579,12 @@ Recompute xref info for each of of C<@funcs>.
 
 sub redefined {
     forget @_;
-    xref_object $_ for @_;
+    {
+	no strict 'refs';
+	my ($sub, $pack) = @_;
+	$pack ||= 'main';
+	xref_object \&{"$pack\::$sub"};
+    }
 }
 
 sub _ret_list {
@@ -643,7 +658,7 @@ Find locations where C<$var> is used.
 sub var_uses {
     my $v = shift;
     $v =~ s/.*:://;
-    return _ret_list [ grep $_->{assign},@{$var_use{$v}} ];
+    return _ret_list $var_use{$v};
 }
 
 =item C<var_assigns($var)>
@@ -655,7 +670,7 @@ Find locations where C<$var> is assigned to.
 sub var_assigns {
     my $v = shift;
     $v =~ s/.*:://;
-    return _ret_list $var_use{$v};
+    return _ret_list [ grep $_->{assign},@{$var_use{$v}} ];
 }
 
 =item C<package_subs($pack)>
@@ -711,12 +726,15 @@ sub _apropos {
 	    sort keys %$h;
 	}
     };
-#     if ($mod) {
-# 	@r = grep {
-# 	    !exists($h->{$_}{package})
-# 		|| ($h->{$_}{package} eq $module_files);
-# 	} @r;
-#     }
+    if ($mod) {
+	my @tmp = grep {
+	    my $xs = $h->{$_};
+	    grep {
+		!exists($_->{package}) || ($_->{package} eq $mod);
+	    } @$xs;
+	} @r;
+	@r = @tmp if @tmp;
+    }
     return wantarray ? @r : \@r;
 }
 
@@ -763,7 +781,7 @@ __END__
 =head1 EXPORTS
 
 Nothing by default, but all sub and variable described above can be
-imported.  L<Devel::Xref> also defines the tags C<:most> for the
+imported.  C<Devel::Xref> also defines the tags C<:most> for the
 above-listed functions, and C<:all> for those and the variables as
 well.
 
@@ -774,10 +792,13 @@ up a sub by name.  Finally, there is some evil in the way we guess
 file and line numbers, both of which should be done more cleanly and
 effectively.
 
+=head1 SEE ALSO
+
+L<B::Xref>, from which C<Devel::Xref> is heavily derivative.
+
 =head1 AUTHOR
 
 L<B::Xref> by Malcolm Beattie, m(angl|odifi)ed by Sean O'Rourke
 (seano@cpan.org).
 
 =cut
-

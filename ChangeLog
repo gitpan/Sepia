@@ -1,4 +1,19 @@
+2004-04-06  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* sepia-w3m.el: moved w3m-perldoc support here.
+
+	* README: added description, removed disclaimer
+
+	* sepia.el (sepia-symbol-info, sepia-doc-update): POD scanning
+	and cperl hackage for eldoc support.
+
 2004-04-05  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* Xref.pm (redefined,forget): make them take a single sub at a
+	time, and pay attention to packages.
+	(_apropos): use package info to narrow choices.
+
+	* sepia.el (sepia-eval-defun,sepia-eval-buffer): new functions.
 
 	* test.pl: satisfy the cpants Fascists.
 	

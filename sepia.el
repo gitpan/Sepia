@@ -7,36 +7,13 @@
 
 ;;; Commentary:
 
-;; Primitive environment for interactive Perl development.  To use it,
-;;
-;;     1) Install Emacs::EPL, Data::Dumper, and Module::Info from CPAN.
-;;     2) place Devel/Xref.pm somewhere in your @INC path (or edit the
-;;        code below that points to it).
-;;     3) put sepia.el and generic-repl.el somewhere Emacs will find them.
-;;     4) In Emacs, evaluate
-;;        M-x load-library <ret> sepia <ret>
-;;        M-x sepia-init <ret>
-;;        M-x sepia-rebuild <ret>
-;;
-;; This will give you an Xref database for the EPL process.  To add
-;; some of your own modules, load them, then type
-;;     M-x perl-eval-buffer
-;;
-;; To interact more closely with the Perl process, you can start up a
-;; read-eval-print loop (REPL) by typing
-;;     M-x sepia-interact
-;;
-;; Alternatively, you can get an interactive Perl scratchpad like the
-;; *scratch* buffer by typing
-;;     M-x sepia-scratchpad <ret>
-;; then type the relevant "use" statements into this buffer, and
-;; evaluate them by hitting C-j.
 
 ;;; Code:
 
 (require 'perl)
 (require 'epl)
 (require 'generic-repl)
+(require 'cperl-mode)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Xrefs -- use Perl to find definitions and uses.
@@ -74,34 +51,58 @@ sub _module_info($)
 1;
 ")
 
+(defvar sepia-prefix-key (kbd "\M-.")
+  "Prefix for functions in ``sepia-keymap''.")
+
 (defvar sepia-keymap
   (let ((km (make-sparse-keymap)))
     (dolist (kv '(("c" . sepia-callers)
 		  ("C" . sepia-callees)
 		  ("v" . sepia-var-uses)
-;;		  ("V" . sepia-var-defs)
-		  ("V" . sepia-var-assigns)
+		  ("V" . sepia-var-defs)
+;;		  ("V" . sepia-var-assigns)
 		  ("\M-." . sepia-dwim)
+		  ("d" . sepia-w3m-perldoc-this)
 		  ("f" . sepia-defs)
 		  ("r" . sepia-rebuild)
 		  ("n" . sepia-next)))
-      (define-key km (car kv) (cdr kv))))
-  "Keymap for sepia functions.  This is just an example of how you
+      (define-key km (car kv) (cdr kv)))
+    km)
+  "Keymap for Sepia functions.  This is just an example of how you
 might want to bind your keys, which works best when bound to
-`\\M-.'.  I actually bind ``sepia-next'' to `\\M-,' instead,
-replacing ``tags-loop-continue'', a similar feature I never
-use.")
+`\\M-.'.")
 
 (defun sepia-install-keys ()
   (interactive)
-  (define-key (current-local-map) "\M-." sepia-keymap)
-  (define-key (current-local-map) "\M-," 'sepia-next))
+  (let ((map (current-local-map)))
+    (define-key map sepia-prefix-key sepia-keymap)
+    (define-key map "\M-," 'sepia-next)
+    (define-key map "\C-\M-x" 'sepia-eval-defun)
+    (define-key map "\C-c\C-l" 'sepia-eval-buffer)
+    (define-key map "\C-c\C-d" 'sepia-w3m-view-pod)))
 
 (defun perl-name (sym)
   (substitute ?_ ?- (symbol-name sym)))
 
 (defun sepia-init ()
-"Load perl support code and start the inferior Perl process."
+"Perform the initialization necessary to start Sepia, a set of
+tools for developing Perl in Emacs.
+
+The following keys are bound to the prefix
+``sepia-prefix-key'' (`\\M-.' by default), which can be changed
+by setting ``sepia-prefix'' before calling ``sepia-init'':
+
+\\{sepia-keymap}
+
+In addition to these keys, Sepia defines the following keys,
+which may conflict with keys in your setup, but which are
+intended to shadow similar functionality in elisp-mode:
+
+`\\C-c\\C-d'        ``sepia-w3m-view-pod''
+`\\C-c\\C-l'        ``sepia-eval-buffer''
+`\\C-\\M-x'         ``sepia-eval-defun''
+`\\M-,'             ``sepia-next'' (shadows ``tags-loop-continue'')
+"
   (interactive)
 
   ;; Load perl defs:
@@ -148,6 +149,10 @@ Does not require loading.")
 	       (guess-module-file . "Guess file corresponding to module.")
 	       (file-modules . "List the modules defined in a file.")))
     (define-xref-function (car x) (cdr x)))
+  (add-hook 'cperl-mode-hook 'sepia-install-eldoc)
+  (add-hook 'cperl-mode-hook 'sepia-doc-update)
+  (add-hook 'sepia-repl-hook 'sepia-repl-init-syntax)
+  (add-hook 'sepia-repl-hook 'sepia-install-eldoc)
   (sepia-rebuild)
   (sepia-interact))
 
@@ -591,14 +596,53 @@ prefix arg, replace the region with the result."
 		       (concat "; do { " expr ";}; $_ }")
 		       beg end replace-p))
 
-(defvar w3m-perldoc-history nil)
-(defun w3m-perldoc-this (thing)
-  "View perldoc for module at point."
-  (interactive (list (sepia-interactive-arg 'module)))
-  (w3m-perldoc thing))
+(defun sepia-guess-package (sub &optional file)
+  "Guess which package SUB is defined in."
+  (let ((defs (xref-defs sub)))
+    (cond
+      ((and (= (length defs) 1)
+	    (or (not file) (equal (caar defs) file)))
+       (fourth (car defs)))
+      ((and file (fourth (find-if (lambda (x) (equal (car x) file)) defs))))
+      (t (or (car (xref-file-modules (buffer-file-name))) "main")))))
+
+(defun sepia-eval-defun ()
+  "Re-evaluate the current sub in the appropriate package, and
+rebuild its Xrefs."
+  (interactive)
+  (save-excursion
+    (let ((beg (progn (beginning-of-defun) (point)))
+	  (end (progn (end-of-defun) (point))))
+      (goto-char beg)
+      (when (looking-at "^sub\s +\\([^ 	{]+\\)")
+	(let* ((sub (match-string 1))
+	       (sepia-eval-package
+		(sepia-guess-package sub (buffer-file-name))))
+	  (sepia-eval (buffer-substring-no-properties beg end))
+	  (xref-redefined (match-string 1) sepia-eval-package))))))
+
+(defun sepia-eval-buffer (&optional no-update)
+  "Re-evaluate the current file; unless prefix argument is given,
+also rebuild the xref database."
+  (interactive)
+  (ifa (buffer-file-name)
+       (perl-load-file it)
+       (perl-eval-buffer))
+  (unless no-update
+    (xref-rebuild)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; REPL
 
 (defvar sepia-eval-package "main"
-"Package in which ``sepia-eval'' evaluates perl expressions.")
+  "Package in which ``sepia-eval'' evaluates perl expressions.")
+(defvar sepia-repl-hook nil
+  "Hook run after Sepia REPL starts.")
+
+(defun sepia-repl-init-syntax ()
+  (local-unset-key ":")
+  (set-syntax-table cperl-mode-syntax-table)
+  (modify-syntax-entry ?> "."))
 
 (defun sepia-set-eval-package (new-package)
   (setq sepia-eval-package new-package))
@@ -611,13 +655,14 @@ prefix arg, replace the region with the result."
 value of the last expression.  XXX: this is the only function
 that requires EPL (the rest can use Pmacs)."
   (epl-eval (epl-init) nil 'scalar-context
-"{ package " (or sepia-eval-package "main") ";
+	    "{ package " (or sepia-eval-package "main") ";
 require Data::Dumper;
 local $Data::Dumper::Indent=0; local $Data::Dumper::Deparse=1;
 local $_ = Data::Dumper::Dumper([do { " string "}]);
 s/^.*?=\\s*\\[//; s/\\];$//;$_}"))
 
 (defun sepia-interact ()
+"Start or switch to a perl interaction buffer."
   (interactive)
   (unless (get-buffer "*perl-interaction*")
     (generic-repl "perl"))
@@ -646,13 +691,106 @@ s/^.*?=\\s*\\[//; s/\\];$//;$_}"))
 		    :header sepia-repl-header
 		    :cd sepia-set-cwd
 		    :init (lambda ()
-			    (local-unset-key ":")
-			    (set-syntax-table cperl-mode-syntax-table)
-			    (modify-syntax-entry ?> "."))
+			    (run-hooks 'sepia-repl-hook))
 		    :comment-start "#"
 		    :get-package sepia-get-eval-package
 		    :set-package sepia-set-eval-package))
 	repl-supported-modes))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Doc-scanning
+
+(defvar sepia-doc-map (make-hash-table :test #'equal))
+(defvar sepia-var-doc-map (make-hash-table :test #'equal))
+(defvar sepia-module-doc-map (make-hash-table :test #'equal))
+
+;; (defvar sepia-use-long-doc t
+;;   "Gather additional docs from POD following =item to report with eldoc.")
+
+(defun sepia-doc-scan-buffer ()
+  (save-excursion
+    (goto-char (point-min))
+    (loop while (re-search-forward "^=item\\s +\\([%$&@A-Za-z_].*\\)" nil t)
+       if (let* ((s1 (match-string 1))
+		 (s2 (replace-regexp-in-string
+		      "C<\\([^>]+\\)>"
+		      (lambda (x) (match-string 1 s1)) s1)))
+		    
+	    (cond
+	      ((string-match "^[%$@]\\([^( ]+\\)" s2)
+	       (list 'variable (match-string-no-properties 1 s2)
+		     (let ((beg (progn (forward-line 2) (point)))
+			   (end (1- (re-search-forward "^=" nil t))))
+		       (forward-line -1)
+		       (goto-char beg)
+		       (if (re-search-forward "^\\(.+\\)$" end t)
+			   (concat s2 ": "
+				   (substring-no-properties
+				    (match-string 1)
+				    0 (position ?. (match-string 1))))
+			   s2))))
+	      ((string-match "^\\([^( ]+\\)" s2)
+	       (list 'function (match-string-no-properties 1 s2)
+		     (or (and (equal s2 (match-string 1 s2)) longdoc) s2)))))
+       collect it)))
+
+(defun sepia-brutish-find-package ()
+  (save-excursion
+    (goto-char (point-min))
+    (and (re-search-forward "^\\s *package\\s +\\([^ ;]+\\)" nil t)
+	 (match-string 1))))
+
+(defun sepia-doc-update ()
+"Update documentation for a file.  This documentation, taken from
+\"=item\" entries in the POD, is used for eldoc feedback."
+  (interactive)
+  (let ((pack (ifa (or
+		    (car (xref-file-modules (buffer-file-name)))
+		    (sepia-brutish-find-package))
+		   (concat it "::")
+		   "")))
+    (dolist (x (sepia-doc-scan-buffer))
+      (let ((map (ecase (car x)
+		   (function sepia-doc-map)
+		   (variable sepia-var-doc-map))))
+	(puthash (second x) (third x) map)
+	(puthash (concat pack (second x)) (third x) map)))))
+
+(defun sepia-symbol-info ()
+"Eldoc function for Sepia-mode.  Looks in ``sepia-doc-map'' and
+``sepia-var-doc-map'', then tries calling
+``cperl-describe-perl-symbol''."
+  (save-excursion
+    (multiple-value-bind (obj mod type) (sepia-ident-at-point)
+      (or (and type
+	       (let ((map (ecase type
+			    (function sepia-doc-map)
+			    (variable sepia-var-doc-map)
+			    (module sepia-module-doc-map))))
+		 (or (and mod (gethash (concat mod "::" obj) map))
+		     (gethash obj map))))
+	  (and obj
+	       ;; Loathe cperl a bit.
+	       (flet ((message (&rest blah) (apply #'format blah)))
+		 (let* ((cperl-message-on-help-error nil)
+			(hlp (car (cperl-describe-perl-symbol obj))))
+		   (when hlp
+		     ;; cperl's docstrings are too long.
+		     (setq hlp (replace-regexp-in-string "\\s \\{2,\\}" "  " hlp))
+		     (if (> (length hlp) 75)
+			 (concat (substring hlp 0 72) "...")
+			 hlp)))))
+	  ""))))
+
+(defun sepia-install-eldoc ()
+"Install Sepia hooks for eldoc support (probably requires Emacs >= 21.3)."
+  (interactive)
+  (set (make-variable-buffer-local
+	'eldoc-print-current-symbol-info-function)
+       #'sepia-symbol-info)
+  (if cperl-lazy-installed (cperl-lazy-unstall))
+  (eldoc-mode 1)
+  (setq eldoc-idle-delay 1.0))
 
 (provide 'sepia)
 ;;; sepia.el ends here
