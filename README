@@ -13,9 +13,9 @@ INSTALLATION
 ============
 
 1) Install Emacs::EPL, Data::Dumper, and Module::Info from CPAN.
-2) place Devel/Xref.pm somewhere in your @INC path (or edit sepia.el
-   to point to it).
-3) put sepia.el somewhere Emacs will find it.
+2) place Devel/Xref.pm somewhere in your @INC path (or edit the
+   code below that points to it).
+3) put sepia.el and generic-repl.el somewhere Emacs will find them.
 
 RUNNING
 =======
@@ -31,14 +31,18 @@ of your own modules, load them, then type
 
    M-x perl-eval-buffer <ret>
 
+To interact more closely with the Perl process, you can start up a
+read-eval-print loop (REPL) by typing
+    M-x sepia-interact
+
 Alternatively, you can get an interactive Perl scratchpad like the
 *scratch* buffer by typing
 
-   M-x ipl-start <ret>
+   M-x sepia-scratchpad <ret>
 
 then type the relevant "use" statements into this buffer, and evaluate
-them by hitting C-j.  The most useful part of the package is the
-cross-reference facility; type
+them by hitting C-j.  Probably the most useful part of the package is
+the cross-reference facility; type
 
    M-x sepia- <tab>
 

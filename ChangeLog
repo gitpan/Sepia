@@ -1,3 +1,20 @@
+2004-04-05  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* test.pl: satisfy the cpants Fascists.
+	
+	* Xref.pm (use_type): try to be smarter about when something's
+	being assigned to, vs. merely used as a reference.
+
+	* sepia.el (sepia-repl-header): keep up with generic-repl by
+	doing header line, working dir.
+	(sepia-complete-symbol): stupid bug with modules.
+	(sepia-install-keys): new function.
+	(sepia-var-assigns): assignments are more useful than defs.
+	(sepia-init): start REPL by default.
+
+	* generic-repl.el (repl-cd,repl-set-header): "new" function from
+	Slime to track working dir, update header line.
+
 2004-04-04  Sean O'Rourke  <seano@cs.ucsd.edu>
 
 	* Sepia.jpg: don't ask -- just look.

@@ -39,10 +39,6 @@
 ;; We maintain the following invariant:
 ;;
 ;;  output-start <= output-end <= input-start <= input-end.
-;;
-;; Unlike the original Slime code, this only handles synchronous I/O.
-;; I didn't want to think about how to get it to work both
-;; asynchronously and generally.
 
 ;; Small helper.
 (defun repl-make-variables-buffer-local (&rest variables)
@@ -65,8 +61,11 @@
  (defvar repl-output-end nil
    "Marker for end of output. New output is inserted at this mark.")
 
+;;; Handlers:
  (defvar repl-eval-func nil
    "Function to call to evaluate text from the REPL.")
+ (defvar repl-eval-async-func nil
+   "Function to call to evaluate text from the REPL asynchronously.")
  (defvar repl-get-package-func nil
    "Function to call to change the package in which code is evaluated.")
  (defvar repl-set-package-func nil
@@ -76,6 +75,10 @@
    statement/expression.")
  (defvar repl-completion-func nil
    "Function to complete the symbol at point.")
+ (defvar repl-header-func nil
+   "Function to generate extra header information.")
+ (defvar repl-cd-func nil
+   "Function to change inferior process working directory.")
  )
 
 (defvar repl-supported-modes nil
@@ -83,19 +86,26 @@
 entry's car should be a language's name as a string, while the
 cdr should be a plist of configuration options.  A mode is
 required to supply
-  :eval           the evaluation function, which should accept a
-                  single string, and either return a string or 
-                  throw an error.
+  :eval           a synchronous evaluation function, which should
+                  accept a single string, and either return a
+                  string or throw an error.
+  :eval-async     an asynchronous evaluation function, which should
+                  accept a string and a function to be called one
+                  or more times with output.  Calling this
+                  function with a nil argument indicates end of
+                  output.
 
 It may optionally supply any of:
   :map            base keymap
-  :init           initialization function to run after REPL starts up.
-  :comment-start  single-line comment starting character, used
-                  to comment out messages from generic-repl.
+  :init           initialize state after REPL starts up.
   :get-package    return package in which forms are evaluated
   :set-package    change default evaluation package
   :expression-p   test whether the input forms a complete expression
   :complete       function to complete symbol at point
+  :header         return additional information to display in header-line
+  :cd             change evaluation directory
+  :comment-start  single-line comment starting character, used
+                  to comment out messages from generic-repl.
 ")
 
 (defun generic-repl (lang)
@@ -110,14 +120,22 @@ It may optionally supply any of:
 (defun repl-mode (x) 
   "Major mode for interacting with a X interpreter in X-mode."
   (let ((defn (cdr (assoc x repl-supported-modes))))
+    (assert (and (or (plist-get defn :eval)
+		     (plist-get defn :eval-async))
+		 (not (and (plist-get defn :eval)
+			   (plist-get defn :eval-async))))
+	    t "Must specify sync XOR async evaluation function.")
     (setq
      major-mode 'repl-mode
      comment-start (plist-get defn :comment-start)
      repl-eval-func (plist-get defn :eval)
+     repl-eval-async-func (plist-get defn :eval-async)
      repl-get-package-func (plist-get defn :get-package)
      repl-set-package-func (plist-get defn :set-package)
      repl-input-complete-func (plist-get defn :expression-p)
      repl-completion-func (plist-get defn :complete)
+     repl-header-func (plist-get defn :header)
+     repl-cd-func (plist-get defn :cd)
      mode-name (format "%s-REPL" x)
      )
     (use-local-map (repl-make-keymap
@@ -136,9 +154,9 @@ It may optionally supply any of:
     (set-marker-insertion-type repl-output-end t)
     (set-marker-insertion-type repl-prompt-start-mark t)
     (repl-insert-prompt "" 0)
+    (repl-set-header)
     (if (plist-get defn :init)
-	(funcall (plist-get defn :init)))
-    ))
+	(funcall (plist-get defn :init)))))
 
 (defun repl-make-keymap (parent)
   (let ((kmap (make-sparse-keymap))) 
@@ -151,9 +169,6 @@ It may optionally supply any of:
 		  ("\M-n" repl-next-input)
 		  ("\M-r" repl-previous-matching-input)
 		  ("\M-s" repl-next-matching-input)
-		  ;; XXX: don't know how to do this...
-;; 		  ("\C-c\C-c" 'repl-interrupt)
-;; 		  ("\C-c\C-g" 'repl-interrupt)
 		  ([tab] repl-complete-symbol)
 		  ("\C-c\C-o" repl-clear-output)
 		  ("\C-c\C-t" repl-clear-buffer)
@@ -180,6 +195,21 @@ It may optionally supply any of:
 (defsubst repl-insert-propertized (props &rest args)
   "Insert all ARGS and then add text-PROPS to the inserted text."
   (repl-propertize-region props (apply #'insert args)))
+
+(defface repl-output-face
+  '((t (:inherit font-lock-string-face)))
+  "Face for output in the REPL."
+  :group 'repl)
+
+(defface repl-input-face
+  '((t (:bold t)))
+  "Face for previous input in the REPL."
+  :group 'repl)
+
+(defface repl-result-face
+  '((t ()))
+  "Face for the result of an evaluation in the REPL."
+  :group 'repl)
 
 (defun repl-insert-prompt (result &optional time)
   "Goto to point max, insert RESULT and the prompt.  Set
@@ -238,14 +268,25 @@ after the last prompt to the end of buffer."
   (unless (equal string (car repl-input-history))
     (push string repl-input-history))
   (setq repl-input-history-position -1))
-  
+
 (defun repl-send-string (string)
   (repl-add-to-input-history string)
 ;;  (with-current-buffer (repl-output-buffer)
-  (condition-case err
-    (insert (funcall repl-eval-func string))
-    (error (repl-comment (format "ERROR: %s" (cdr err)))))
-  (repl-insert-prompt ""))
+  (if repl-eval-async-func
+      (funcall repl-eval-async-func string
+	       (lexical-let ((buf (current-buffer)))
+		 (lambda (&optional string)
+		   (with-current-buffer buf
+		     (cond
+		       (string (goto-char (point-max))
+			       (repl-insert-propertized
+				'(face repl-result-face)
+				string))
+		       (t (repl-insert-prompt "" 0)))))))
+      (condition-case err
+	  (repl-insert-prompt (funcall repl-eval-func string))
+	(error (repl-comment (format "ERROR: %s" (cdr err)))
+	       (repl-insert-prompt "" 0)))))
 
 (defun repl-comment (str)
   (let ((beg (point)))
@@ -472,6 +513,28 @@ DIRECTION is 'forward' or 'backward' (in the history list)."
 (defun repl-next-matching-input (regexp)
   (interactive "sNext element matching (regexp): ")
   (repl-history-replace 'forward regexp))
+
+(defun repl-set-header (&optional msg)
+"Update the header line to display MSG.  If MSG is nil, then show
+the current working directory instead."
+  (when (boundp 'header-line-format)
+    (setq header-line-format
+          (format "%s  %s"
+		  (if (fboundp repl-header-func)
+		      (funcall repl-header-func)
+		      "")
+                  (or msg (abbreviate-file-name default-directory))))))
+
+(defun repl-cd (dir &optional name)
+  "Change buffer and (optionally) process working directory to DIR."
+  (interactive "d")
+  (with-current-buffer
+      (if name (get-buffer (format "*%s-interaction*" name)) (current-buffer))
+    (setq default-directory dir)
+    (if (fboundp repl-cd-func)
+	(funcall repl-cd-func (expand-file-name dir)))
+    (repl-set-header)))
+
 
 (provide 'generic-repl)
 ;;; generic-repl.el ends here

@@ -35,7 +35,8 @@ use strict;
 use Config;
 use Cwd 'abs_path';
 use B qw(peekop class comppadlist main_start svref_2object walksymtable
-         OPpLVAL_INTRO SVf_POK OPpOUR_INTRO OPf_MOD cstring);
+         OPpLVAL_INTRO SVf_POK OPpOUR_INTRO OPf_MOD OPpDEREF_HV OPpDEREF_AV
+	 cstring);
 
 =head2 Variables
 
@@ -397,10 +398,22 @@ sub pp_padsv {
 sub pp_padav { pp_padsv(@_) }
 sub pp_padhv { pp_padsv(@_) }
 
+sub use_type($) {
+    my ($op) = @_;
+    if ($op->private & (OPpLVAL_INTRO | OPpOUR_INTRO)) {
+	'intro';
+    } elsif ($op->flags & OPf_MOD
+	     && !($op->private & (OPpDEREF_HV | OPpDEREF_AV))) {
+	'set';
+    } else {
+	'used';
+    }
+}
+
 sub deref {
     my ($op, $var, $as) = @_;
     $var->[1] = $as . $var->[1];
-    process($var, $op->private & OPpOUR_INTRO ? "intro" : "used");
+    process($var, use_type $op);
 }
 
 sub pp_rv2cv { deref(shift, $top, "&"); }
@@ -421,11 +434,7 @@ sub pp_gvsv {
 	$gv = $op->gv;
 	$top = [$gv->STASH->NAME, '$', $gv->SAFENAME];
     }
-    process($top,
-	    ($op->private & OPpLVAL_INTRO
-	     || $op->private & OPpOUR_INTRO) ? "intro"
-	    : ($op->flags & (32|OPf_MOD)) ? "set" # XXX:
-	    : "used");
+    process($top, use_type $op);
 }
 
 sub pp_gv {
@@ -440,7 +449,7 @@ sub pp_gv {
 	$gv = $op->gv;
 	$top = [$gv->STASH->NAME, "*", $gv->SAFENAME];
     }
-    process($top, $op->private & OPpLVAL_INTRO ? "intro" : "used");
+    process($top, use_type $op);
 }
 
 sub pp_const {
@@ -632,6 +641,18 @@ Find locations where C<$var> is used.
 =cut
 
 sub var_uses {
+    my $v = shift;
+    $v =~ s/.*:://;
+    return _ret_list [ grep $_->{assign},@{$var_use{$v}} ];
+}
+
+=item C<var_assigns($var)>
+
+Find locations where C<$var> is assigned to.
+
+=cut
+
+sub var_assigns {
     my $v = shift;
     $v =~ s/.*:://;
     return _ret_list $var_use{$v};
