@@ -7,6 +7,7 @@
 
 ;;; Commentary:
 
+;; See the README file that comes with the distribution.
 
 ;;; Code:
 
@@ -54,8 +55,8 @@ sub _module_info($)
 	    $ret = Module::Info->new_from_module($m);
 	}
     }
-    die \"Can't find module ``$m''\\n\" unless $ret;
-    return $ret;
+#    die \"Can't find module ``$m''\\n\" unless $ret;
+    $ret;
 }
 
 1;
@@ -72,6 +73,7 @@ sub _module_info($)
 		  ("d" . sepia-w3m-perldoc-this)
 		  ("f" . sepia-defs)
 		  ("r" . sepia-rebuild)
+		  ("m" . sepia-module-find)
 		  ("n" . sepia-next)))
       (define-key km (car kv) (cdr kv)))
     km)
@@ -80,6 +82,7 @@ might want to bind your keys, which works best when bound to
 `\\M-.'.")
 
 (defun sepia-install-keys ()
+"Install Sepia bindings in the current local keymap."
   (interactive)
   (let ((map (current-local-map)))
     (define-key map sepia-prefix-key sepia-keymap)
@@ -244,7 +247,7 @@ symbol at point."
 		(xref-guess-module-file mod))))
     (when fn
       (message "Module %s in %s." mod fn)
-      (pop-to-buffer (find-file-noselect fn)))))
+      (pop-to-buffer (find-file-noselect (expand-file-name fn))))))
 
 (defmacro ifa (test then &rest else)
   `(let ((it ,test))
@@ -430,16 +433,26 @@ rebuilds the database unless a prefix argument is given."
   (case type
     (function
      (lambda (line ident)
-      (let ((sub-re (concat "^\\s *sub\\s +.*" ident)))
-	(cond
-	  (line (goto-line line)
-		(or (re-search-backward sub-re
-					(my-bol-from (point) -20) t)
-		    (re-search-forward sub-re
-				       (my-bol-from (point) 10) t))
-		(beginning-of-line))
-	  (t (goto-char (point-min))
-	     (re-search-forward sub-re nil t))))))
+      (let ((sub-re (concat "^\\s *sub\\s +.*" ident "\\>")))
+	;; Test this because sometimes we get lucky and get the line
+	;; just right, in which case beginning-of-defun goes to the
+	;; previous defun.
+	(unless (looking-at sub-re)
+	  (or (and line
+		   (progn
+		     (goto-line line)
+		     (beginning-of-defun)
+		     (looking-at sub-re)))
+	      (progn (goto-char (point-min))
+		     (re-search-forward sub-re nil t)))
+	  (beginning-of-line)))))
+    ;; Old version -- this may actually work better if
+    ;; beginning-of-defun goes flaky on us.
+;; 	   (or (re-search-backward sub-re
+;; 				   (my-bol-from (point) -20) t)
+;; 	       (re-search-forward sub-re
+;; 				  (my-bol-from (point) 10) t))
+;; 	   (beginning-of-line)
     (variable
      (lambda (line ident)
        (let ((var-re (concat "\\<" ident "\\>")))
@@ -485,7 +498,8 @@ rebuilds the database unless a prefix argument is given."
 	(case-fold-search nil))
     (condition-case c
 	(destructuring-bind (sbeg . send) (bounds-of-thing-at-point 'symbol)
-	  (destructuring-bind (wbeg . wend) (bounds-of-thing-at-point 'word)
+	  (destructuring-bind (wbeg . wend) (or (bounds-of-thing-at-point 'word)
+						(cons (point) (point)))
 	    (if (member (char-before send) '(?> ?\ ))
 		(signal 'wrong-number-of-arguments 'sorta))
 	    (if (member (char-after wbeg) '(?@ ?$ ?%))
@@ -496,7 +510,11 @@ rebuilds the database unless a prefix argument is given."
 		(values nil (buffer-substring sbeg send) 'module)
 		(values (buffer-substring wbeg wend)
 			(if (= sbeg wbeg) nil
-			    (buffer-substring sbeg (- wbeg 2)))
+			    (buffer-substring sbeg
+					      (if (= (char-before (1- wbeg))
+							 ?\:)
+						  (- wbeg 2)
+						  (1- wbeg))))
 			(if (member (char-before sbeg) '(?@ ?$ ?%))
 			    'variable
 			    'function)))))
@@ -516,26 +534,26 @@ The function is intended to be bound to \\M-TAB, like
 ``lisp-complete-symbol''."
   (interactive)
   (multiple-value-bind (obj mod type) (sepia-ident-at-point)
-    (when (and type (not (and obj (string= obj ""))))
+    ;; Complete on empty only if we hit tab twice.
+    (if (and type (or (not (and obj (string= obj "")))
+		      (eq last-command 'repl-complete-symbol)))
       (let ((completions
 	     (ecase type
 	       (function (xref-apropos (concat "^" obj) mod))
 	       (variable (xref-var-apropos (concat "^" obj) mod))
 	       (module (xref-mod-apropos (concat "^" mod)))))
-	    (eow (end-of-thing 'word)))
+	    (eow (or (and (thing-at-point 'word) (end-of-thing 'word))
+		     (point)))
+	    (thing-len (length (sepia-thing-at-point 'symbol))))
 	(case (length completions)
 	  (0 (message "No completions for %s." (or obj mod)))
-	  (1 (delete-region
-	      (- eow (length (if (eq type 'module) mod obj)))
-	      eow)
+	  (1 (delete-region (- eow thing-len) eow)
 	     (insert (car completions)))
-	  (t (delete-region
-	      (- eow (length (if (eq type 'module) mod obj)))
-	      eow)
-	     (insert (try-completion (if (eq type 'module) mod obj)
-				     completions))
+	  (t (delete-region (- eow thing-len) eow)
+	     (insert (try-completion "" completions))
 	     (with-output-to-temp-buffer "*Completions*"
-	       (display-completion-list completions))))))))
+	       (display-completion-list completions)))))
+      (message "sepia: empty -- hit tab again to complete."))))
 
 (defun sepia-indent-or-complete ()
 "Indent the current line and, if indentation doesn't move point,
@@ -544,7 +562,8 @@ be bound to TAB."
   (interactive)
   (let ((pos (point)))
     (cperl-indent-command)
-    (when (= pos (point))
+    (when (and (= pos (point))
+	       (eq last-command 'sepia-indent-or-complete))
       (sepia-complete-symbol))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -645,15 +664,28 @@ rebuild its Xrefs."
 			  body))
 	  (xref-redefined sub sepia-eval-package))))))
 
+(defun sepia-extract-def (file line obj mod)
+  (with-current-buffer (find-file-noselect (expand-file-name file))
+    (save-excursion
+      (funcall (sepia-refiner 'function) line obj)
+      (beginning-of-line)
+      (buffer-substring (point)
+			(progn (end-of-defun) (point))))))
+
 (defun sepia-eval-buffer (&optional no-update)
   "Re-evaluate the current file; unless prefix argument is given,
 also rebuild the xref database."
   (interactive)
-  (ifa (buffer-file-name)
-       (perl-load-file it)
-       (perl-eval-buffer))
-  (unless no-update
-    (xref-rebuild)))
+  (let ((sepia-eval-file (buffer-file-name))
+	(buf (current-buffer)))
+    (with-temp-buffer
+      (insert-buffer-substring buf)
+      (insert "\nBEGIN { die }\n")
+      (condition-case err
+	  (sepia-eval (buffer-string))
+	(perl-error t)))
+    (unless no-update
+      (xref-rebuild))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; REPL
@@ -678,7 +710,7 @@ also rebuild the xref database."
 (defun sepia-get-eval-package ()
   sepia-eval-package)
 
-(defun sepia-eval (string)
+(defun sepia-eval (string &optional discard)
   "Evaluate STRING as Perl code, returning the pretty-printed
 value of the last expression.  If SOURCE-FILE is given, use this
 as the file containing the code to be evaluated.  XXX: this is
@@ -690,10 +722,13 @@ the only function that requires EPL (the rest can use Pmacs)."
      "")
  (if sepia-eval-line (format "$Devel::Xref::line = %d;" sepia-eval-line)
      "")
- "require Data::Dumper;"
- "local $Data::Dumper::Indent=0; local $Data::Dumper::Deparse=1;"
- "local $_ = Data::Dumper::Dumper([do { " string "}]);"
- "s/^.*?=\\s*\\[//; s/\\];$//;$_}")))
+ (if discard
+     (concat string "; 'ok' }\n")
+     (concat
+      "require Data::Dumper;"
+      "local $Data::Dumper::Indent=0; local $Data::Dumper::Deparse=1;"
+      "local $_ = Data::Dumper::Dumper([do { " string "}]);"
+      "s/^.*?=\\s*\\[//; s/\\];$//;$_}")))))
 
 (defun sepia-interact ()
 "Start or switch to a perl interaction buffer."
@@ -744,25 +779,27 @@ the only function that requires EPL (the rest can use Pmacs)."
 (defun sepia-doc-scan-buffer ()
   (save-excursion
     (goto-char (point-min))
-    (loop while (re-search-forward "^=item\\s +\\([%$&@A-Za-z_].*\\)" nil t)
-       if (let* ((s1 (match-string 1))
-		 (s2 (replace-regexp-in-string
-		      "C<\\([^>]+\\)>"
-		      (lambda (x) (match-string 1 s1)) s1)))
-		    
+    (loop while (re-search-forward
+		 "^=\\(item\\|head2\\)\\s +\\([%$&@A-Za-z_].*\\)" nil t)
+       if (let* ((s1 (match-string 2))
+		 (s2 (let ((case-fold-search nil))
+		       (replace-regexp-in-string
+			"[A-Z]<\\([^>]+\\)>"
+			(lambda (x) (match-string 1 s1)) s1)))
+		 (longdoc
+		  (let ((beg (progn (forward-line 2) (point)))
+			(end (1- (re-search-forward "^=" nil t))))
+		    (forward-line -1)
+		    (goto-char beg)
+		    (if (re-search-forward "^\\(.+\\)$" end t)
+			(concat s2 ": "
+				(substring-no-properties
+				 (match-string 1)
+				 0 (position ?. (match-string 1))))
+			s2))))
 	    (cond
 	      ((string-match "^[%$@]\\([^( ]+\\)" s2)
-	       (list 'variable (match-string-no-properties 1 s2)
-		     (let ((beg (progn (forward-line 2) (point)))
-			   (end (1- (re-search-forward "^=" nil t))))
-		       (forward-line -1)
-		       (goto-char beg)
-		       (if (re-search-forward "^\\(.+\\)$" end t)
-			   (concat s2 ": "
-				   (substring-no-properties
-				    (match-string 1)
-				    0 (position ?. (match-string 1))))
-			   s2))))
+	       (list 'variable (match-string-no-properties 1 s2) longdoc))
 	      ((string-match "^\\([^( ]+\\)" s2)
 	       (list 'function (match-string-no-properties 1 s2)
 		     (or (and (equal s2 (match-string 1 s2)) longdoc) s2)))))

@@ -1,4 +1,33 @@
+2004-04-10  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* Xref.pm: update $VERSION to track Sepia release.
+
+	* sepia.el (sepia-indent-or-complete): only complete on the
+	second TAB.
+
+2004-04-09  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* sepia.el (sepia-refiner): tweak refining function a bit more.
+	I'm still not entirely happy with this, but it's getting better.
+	Time and experimentation are required.
+
+	* sepia-tree.el (sepia-calle[er]-tree): New file.  Use
+	caller/callee information to generate tree-view using David
+	Ponce's wonderful tree-widget.
+
+	* Xref.pm (_apropos_re): Add that Emacs-style multipart-word
+	completion, so e.g. D:v_d -> Devel::Xref::var_defs.  It's groovy,
+	man.
+	(%firstline): gone.  Just getting a line within the sub is good
+	enough -- we can fix it on the Emacs side of the fence later.
+
 2004-04-08  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* sepia-w3m.el (sepia-w3m-perldoc-this): work for functions as
+	well as modules, and try to go to correct position in manpage.
+
+	* sepia.el (sepia-eval-buffer): use 'BEGIN{ die }' to do Xrefs
+	for scripts without loading them.
 
 	* Xref.pm: Localize a bunch of things instead of stomping on
 	package lexicals.  This makes the module better handle repeated

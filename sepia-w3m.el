@@ -38,7 +38,7 @@
 
 ;;;###autoload
 (defun w3m-about-buffer-perldoc (url &optional no-decode no-cache &rest args)
-  (when (string-match "\\`about://buffer-perldoc/" url)
+  (when (string-match "\\`about://perldoc-buffer/" url)
     (let ((buf (get-buffer (w3m-url-decode-string
 			    (substring url (match-end 0)))))
 	  (default-directory w3m-profile-directory)
@@ -51,11 +51,11 @@
 			  w3m-perldoc-pod2html-command
 			  t '(t nil) nil
 			  (append w3m-perldoc-pod2html-arguments
-				  '("--htmlroot=about://buffer-perldoc"))))
+				  '("--htmlroot=about://perldoc-buffer"))))
 	(let ((case-fold-search t))
 	  (goto-char (point-min))
 	  (while (re-search-forward
-		  "<a href=\"about://\\(buffer-\\)?perldoc/\\([^\"]*\\)\\(\\.html\\)\">" nil t)
+		  "<a href=\"about://perldoc\\(-buffer\\)?/\\([^\"]*\\)\\(\\.html\\)\">" nil t)
 	    (delete-region (match-beginning 3) (match-end 3))
 	    (save-restriction
 	      (narrow-to-region (match-beginning 2) (match-end 2))
@@ -69,14 +69,24 @@
 (defun sepia-w3m-view-pod (&optional buffer)
   "View POD for the current buffer."
   (interactive)
-  (w3m-goto-url (concat "about://buffer-perldoc/"
+  (w3m-goto-url (concat "about://perldoc-buffer/"
 			(w3m-url-encode-string (buffer-name buffer)))))
 
 ;;;###autoload
-(defun sepia-w3m-perldoc-this (thing)
+(defun sepia-w3m-perldoc-this (obj &optional mod type)
   "View perldoc for module at point."
-  (interactive (list (sepia-interactive-arg 'module)))
-  (w3m-perldoc thing))
+  (interactive (multiple-value-list (sepia-ident-at-point)))
+  (let ((mod (or mod (fourth (car
+			      (if (eq type 'variable)
+				  (xref-var-defs obj)
+				  (xref-defs obj mod)))))))
+    (when mod
+      (w3m-perldoc mod)
+      (when (and obj (not (eq type 'module))
+		 (re-search-forward
+		  (concat "^\\Sw*\\<" obj "\\>") nil t))
+	(beginning-of-line)
+	(recenter)))))
 
 (provide 'sepia-w3m)
 

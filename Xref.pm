@@ -1,6 +1,6 @@
 package Devel::Xref;
 
-our $VERSION = '0.01';
+our $VERSION = '0.54';
 
 =head1 NAME
 
@@ -32,6 +32,8 @@ most of its code.
 =cut
 
 use strict;
+use warnings;
+no warnings 'uninitialized';
 use Config;
 use Cwd 'abs_path';
 use B qw(peekop class comppadlist main_start svref_2object walksymtable
@@ -108,7 +110,7 @@ our %EXPORT_TAGS =
 
 sub UNKNOWN { ["?", "?", "?"] }
 
-our @pad;			# lexicals in current pad
+my @pad;			# lexicals in current pad
 				# as ["(lexical)", type, name]
 our %done;			# keyed by $$op: set when each $op is done
 my $top = UNKNOWN;		# shadows top element of stack as
@@ -117,7 +119,6 @@ our $file;			# shadows current filename
 my $line;			# shadows current line number
 our $subname;			# shadows current sub name
 our @todo = ();			# List of CVs that need processing
-our %firstline;		# first line numbers seen in a sub (hack)
 
 our $DEBUG = 0;
 sub dprint {
@@ -201,15 +202,18 @@ sub add_use {
 sub add_def {
     my ($l, $e, $file, $line, $pack) = @_;
     push @{$_[0]}, $e unless grep {
-	$_->{file} eq $file && (!$pack || $pack eq $_->{package})
+	if ($_->{file} eq $file && $pack eq $_->{package}) {
+#	    $_->{line} = $line if $line < $_->{line};
+	    1;
+	}
     } @$l;
 }
 
 sub process {
     my ($var, $event) = @_;
-    dprint "Processing $event: @$var ($subname)";
     my ($pack, $type, $name) = @$var;
     my $pack = realpack($pack);
+    dprint "Processing $event: @$var ($subname)";
     if ($type eq "*") {
 	if ($event eq "used" || $event eq 'set') {
 	    return;
@@ -230,14 +234,14 @@ sub process {
 	# Handle caller/callee relations
 	my ($spack, $sname) = split_name($subname);
 
-	add_use $call{$name},
-	{ file => $file,
-	  sub => $sname,
-	  sub_package => $spack,
-	  package => $pack,
-	  line => $line
-	},
-	    $file, $line;
+	add_use($call{$name},
+		{ file => $file,
+		  sub => $sname,
+		  sub_package => $spack,
+		  package => $pack,
+		  line => $line
+		},
+		$file, $line);
 
 	push @{$callby{$sname}},
 	{ sub => $name,
@@ -246,22 +250,18 @@ sub process {
 	} unless grep {
 	    $_->{sub} eq $name
 		&& $_->{sub_package} eq $pack
-		&& $_->{package} eq $spack
-	    } @{$callby{$sname}};
+		    && $_->{package} eq $spack
+		} @{$callby{$sname}};
     } elsif ($type eq 's' || $subname eq '(definitions)') {
 	# Handle definition
 	my $l = $line;
-	if (exists($firstline{$name}{$pack})
-	    && $firstline{$name}{$pack} < $l) {
-	    $l = $firstline{$name}{$pack};
-	}
 	my $obj = { file => $file,
 		    sub => $name,
 		    package => $pack,
 		    line => $l };
-	add_use $module_subs{$pack}, $obj, $file, $l, $pack;
+	add_use($module_subs{$pack}, $obj, $file, $l, $pack);
 	dprint "Adding definition for $name at $file:$l";
-	add_def $def{$name}, $obj, $file, $l, $pack;
+	add_def($def{$name}, $obj, $file, $l, $pack);
     } elsif ($name !~ /^[\x00-\x1f^] | ^\d+$ | ^[\W_]$
 		       | ^(?:ENV|INC|STD(?:IN|OUT|ERR)|SIG)$ /x
 	     && realpack($pack)) {
@@ -307,16 +307,12 @@ sub update_line_number {
 	    }
 	}
     }
-    if (!exists($firstline{$name}{$pack})
-	|| $firstline{$name}{$pack} > $l) {
-	$firstline{$name}{$pack} = $l;
-    }
 }
 
 sub load_pad {
     my $padlist = shift;
     my ($namelistav, $vallistav, @namelist, $ix);
-    local @pad = ();
+    @pad = ();
     return if class($padlist) eq "SPECIAL";
     ($namelistav,$vallistav) = $padlist->ARRAY;
     @namelist = $namelistav->ARRAY;
@@ -373,17 +369,16 @@ sub xref_cv {
     my $cv = shift;
     my $pack = $cv->GV->STASH->NAME;
     local $subname = ($pack eq "main" ? "" : "$pack\::") . $cv->GV->NAME;
-    dprint "Xreffing $subname";
     load_pad($cv->PADLIST);
     xref($cv->START);
 }
 
 sub xref_object {
     my $cvref = shift;
-    local @todo;
-    local %firstline;
+    local (@todo, %done);
     my $cv = svref_2object($cvref);
     xref_cv($cv);
+    dprint "todo = (@todo)";
     my $gv = $cv->GV;
     process([$gv->STASH->NAME, '&', $gv->NAME], 'subdef');
 }
@@ -548,8 +543,7 @@ sub rebuild {
     %call = (); %callby = (); %def = (); %module_subs = ();
     %var_def = (); %var_use = ();
     %module_files = (); %file_modules = ();
-    local @todo;
-    local %firstline;
+    local (@todo, %done);
     xref_definitions;
     xref_main;
     1;
@@ -614,15 +608,18 @@ sub redefined {
 }
 
 sub _ret_list {
-    my $l = shift;
+    my ($l, $mod) = @_;
     my @r = map {
 	[ @{$_}{qw(file line sub package)} ]
     } @$l;
     # Remove Exporter if we've got more than one answer, since it's
     # bogus.
-    if (@r > 1) {
-	@r = grep { $_->[0] !~ /Exporter.pm$/ } @r;
-    }
+#     if (@r > 1) {
+	@r = grep { $_->[0] !~ /Exporter\.pm$/ } @r;
+	if ($mod) {
+	    @r = grep { !$_->[3] || $_->[3] eq $mod } @r;
+	}
+#     }
     return wantarray ? @r : \@r;
 }
 
@@ -634,7 +631,7 @@ List callers of C<$func>.
 
 sub callers {
     my $f = shift;
-    return _ret_list $call{$f};
+    return _ret_list $call{$f}, @_;
 }
 
 =item C<callees($func)>
@@ -660,7 +657,7 @@ Find locations where C<$func> is defined.
 sub defs {
     my $f = shift;
     $f =~ s/.*:://;
-    return _ret_list $def{$f};
+    return _ret_list $def{$f}, @_;
 }
 
 =item C<var_defs($var)>
@@ -672,7 +669,7 @@ Find locations where C<$var> is defined.
 sub var_defs {
     my $v = shift;
     $v =~ s/.*:://;
-    return _ret_list $var_def{$v};
+    return _ret_list $var_def{$v}, @_;
 }
 
 =item C<var_uses($var)>
@@ -684,7 +681,7 @@ Find locations where C<$var> is used.
 sub var_uses {
     my $v = shift;
     $v =~ s/.*:://;
-    return _ret_list $var_use{$v};
+    return _ret_list $var_use{$v}, @_;
 }
 
 =item C<var_assigns($var)>
@@ -696,7 +693,7 @@ Find locations where C<$var> is assigned to.
 sub var_assigns {
     my $v = shift;
     $v =~ s/.*:://;
-    return _ret_list [ grep $_->{assign},@{$var_use{$v}} ];
+    return _ret_list [ grep $_->{assign},@{$var_use{$v}} ], @_;
 }
 
 =item C<mod_subs($pack)>
@@ -761,24 +758,38 @@ Find subs matching C<$expr>.
 
 =cut
 
+sub _apropos_re($) {
+    # Do that crazy multi-word identifier completion thing:
+    my $re = shift;
+    if ($re !~ /[^\w\d_^:]/) {
+	$re =~ s/(?<=[A-Za-z\d])([^A-Za-z\d])/[A-Za-z\\d]*$1+/g;
+    }
+    qr/$re/;
+}
+
 sub _apropos {
     my ($h, $re, $mod) = @_;
     my @r = do {
 	if($re) {
-	    $re = qr/$re/;
+	    $re = _apropos_re($re);
 	    sort grep /$re/, keys %$h;
 	} else {
 	    sort keys %$h;
 	}
     };
     if ($mod) {
-	my @tmp = grep {
+	$mod = _apropos_re($mod);
+	@r = map {
+	    my $sn = $_;
 	    my $xs = $h->{$_};
-	    grep {
-		!exists($_->{package}) || ($_->{package} eq $mod);
+	    map {
+		if (!exists($_->{package}) || ($_->{package} =~ /$mod/)) {
+		    ("$_->{package}\::$sn");
+		} else {
+		    ();
+		}
 	    } @$xs;
 	} @r;
-	@r = @tmp if @tmp;
     }
     return wantarray ? @r : \@r;
 }
