@@ -1,0 +1,49 @@
+pscope.el and Devel::Xref
+=========================
+
+Sorry this isn't a "real" distribution, but it really shouldn't be.
+First, Devel::Xref is largely cut-and-pasted from B::Xref, and the two
+modules should probably be integrated.  Second, it's most useful with
+the Emacs file, and I haven't tracked down how to make MakeMaker
+install that on a "make install".  Given that installation wouldn't be
+automatic anyways, it doesn't seem worthwhile to me to make this a
+distribution.
+
+INSTALLATION
+============
+
+1) Install Emacs::EPL and Module::Info from CPAN.
+2) place Devel/Xref.pm somewhere in your @INC path (or edit pscope.el
+   to point to it).
+3) put pscope.el somewhere Emacs will find it.
+
+RUNNING
+=======
+
+In Emacs, type
+
+   M-x load-library <ret> pscope <ret>
+   M-x pscope-init <ret>
+   M-x pscope-rebuild <ret>
+
+This will give you an Xref database for the EPL process.  To add some
+of your own modules, load them, then type
+
+   M-x perl-eval-buffer <ret>
+
+Alternatively, you can get an interactive Perl scratchpad like the
+*scratch* buffer by typing
+
+   M-x ipl-start <ret>
+
+then type the relevant "use" statements into this buffer, and evaluate
+them by hitting C-j.  The most useful part of the package is the
+cross-reference facility; type
+
+   M-x pscope- <tab>
+
+to get a list of functions using it.  In general, the functions will
+look up zero or more source locations, then allow you to cycle
+through them with "M-x pscope-next".  With a prefix argument, the
+functions will instead display a grep-mode buffer listing all the
+hits, from which you can then navigate.
