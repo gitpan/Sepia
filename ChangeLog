@@ -1,3 +1,17 @@
+2004-04-03  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* pscope.el: (pscope-set-found): remove locations with no
+	  file in package "main", which were causing errors before.
+	  (pscope-dwim): new function.  New functions
+	  pscope-complete-symbol and pscope-indent-or-complete for
+	  symbol completion.  Not well-tested, but they seem to work.
+	  The most annoying thing is that since the Xref db isn't
+	  automatically updated, it won't always know as much as you
+	  expect.
+	  (pscope-load-file): new function.
+
+	* Xref.pm: update export lists to reflect new functions.
+
 2004-04-02  Sean O'Rourke  <seano@cs.ucsd.edu>
 
 	* Xref.pm: minor cleanup.

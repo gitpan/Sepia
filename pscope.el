@@ -64,6 +64,23 @@ sub _module_info($)
 1;
 ")
 
+(defvar pscope-keymap
+  (let ((km (make-sparse-keymap)))
+    (dolist (kv '(("c" . pscope-callers)
+		  ("C" . pscope-callees)
+		  ("v" . pscope-var-uses)
+		  ("V" . pscope-var-defs)
+		  ("\M-." . pscope-dwim)
+		  ("f" . pscope-defs)
+		  ("r" . pscope-rebuild)
+		  ("n" . pscope-next)))
+      (define-key km (car kv) (cdr kv))))
+  "Keymap for pscope functions.  This is just an example of how you
+might want to bind your keys, which works best when bound to
+`\\M-.'.  I actually bind ``pscope-next'' to `\\M-,' instead,
+replacing ``tags-loop-continue'', a similar feature I never
+use.")
+
 (defun perl-name (sym)
   (substitute ?_ ?- (symbol-name sym)))
 
@@ -232,6 +249,28 @@ buffer.
 	   (pscope-set-found ret ',(or prompt 'function))
 	   (pscope-next)))))
 
+(defun pscope-dwim (&optional display-p)
+    "Try to DWIM:
+* Find all definitions, if thing-at-point is a function
+* Find all uses, if thing-at-point is a variable
+* Find all definitions, if thing-at-point is a module
+* Prompt otherwise
+"
+    (interactive "P")
+    (multiple-value-bind (obj mod type) (pscope-ident-at-point)
+      (if type
+	  (progn
+	    (pscope-set-found nil type)
+	    (let ((ret (ecase type
+			 (function (xref-defs obj mod))
+			 (variable (xref-var-uses obj mod))
+			 (module `((,(car (xref-mod-files mod)) 1 nil nil))))))
+	      (if display-p
+		  (pscope-show-locations ret)
+		  (pscope-set-found ret type)
+		  (pscope-next))))
+	  (call-interactively 'pscope-defs))))
+
 (define-pscope-query pscope-defs
     "Find all definitions of sub."
   xref-defs)
@@ -286,11 +325,14 @@ buffer.
   (interactive)
   (xref-rebuild))
 
-(defvar w3m-perldoc-history nil)
-(defun w3m-perldoc-this (thing)
-  "View perldoc for module at point."
-  (interactive (list (pscope-interactive-arg 'module)))
-  (w3m-perldoc thing))
+(defun pscope-load-file (file rebuild-p)
+  "Reload a file, possibly rebuilding the Xref database.  When
+called interactively, reloads the current buffer's file, and
+rebuilds the database unless a prefix argument is given."
+  (interactive (list (buffer-file-name) (not prefix-arg)))
+  (perl-load-file file)
+  (if rebuild-p
+      (xref-rebuild)))
 
 (defvar pscope-found)
 (defvar pscope-found-head)
@@ -298,6 +340,10 @@ buffer.
 (defvar pscope-history nil)
 
 (defun pscope-set-found (list &optional type)
+  (setq list
+	(remove-if (lambda (x)
+		     (and (not (car x)) (string= (fourth x) "main")))
+		   list))
   (setq pscope-found list
 	pscope-found-head list)
   (setq pscope-found-refiner (pscope-refiner type))
@@ -347,6 +393,74 @@ buffer.
 				 pscope-found-head))))
       (message "No more definitions.")))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Completion
+
+(defun pscope-ident-at-point ()
+  "Find the perl identifier at point, returning
+\(values object module type), where type is either 'variable,
+'function, or 'module."
+  (let ((cperl-under-as-char nil)
+	(case-fold-search nil))
+    (condition-case c
+	(destructuring-bind (sbeg . send) (bounds-of-thing-at-point 'symbol)
+	  (destructuring-bind (wbeg . wend) (bounds-of-thing-at-point 'word)
+	    (if (save-excursion (goto-char wbeg)
+				(looking-at "[A-Z]"))
+		(values nil (buffer-substring sbeg send) 'module)
+		(values (buffer-substring wbeg wend)
+			(if (= sbeg wbeg) nil
+			    (buffer-substring sbeg (- wbeg 2)))
+			(if (member (char-before sbeg) '(?@ ?$ ?%))
+			    'variable
+			    'function)))))
+      (wrong-number-of-arguments (values nil nil nil)))))
+
+(defun pscope-complete-symbol ()
+"Try to complete the word at point:
+    * as a global variable, if it has a sigil (sorry, no lexical
+      var completion).
+    * as a module, if its last namepart begins with an uppercase
+      letter.
+    * as a function, otherwise.
+The function currently ignores module qualifiers, which may be
+annoying in larger programs.
+
+The function is intended to be bound to \\M-TAB, like
+``lisp-complete-symbol''."
+  (interactive)
+  (multiple-value-bind (obj mod type) (pscope-ident-at-point)
+    (unless (and obj (string= obj ""))
+      (let ((completions
+	     (ecase type
+	       (function (xref-apropos (concat "^" obj mod)))
+	       (variable (xref-var-apropos (concat "^" obj mod)))
+	       (module (xref-mod-apropos (concat "^" mod)))))
+	    (eow (pscope-end-of-word)))
+	(case (length completions)
+	  (0 (message "No completions for %s." (or obj mod)))
+	  (1 (delete-region
+	      (- eow (length (if (eq type 'module) mod obj)))
+	      eow)
+	     (insert (car completions)))
+	  (t (delete-region
+	      (- eow (length (if (eq type 'module) mod obj)))
+	      eow)
+	     (insert (try-completion (if (eq type 'module) mod obj)
+				     completions))
+	     (with-output-to-temp-buffer "*Completions*"
+	       (display-completion-list completions))))))))
+
+(defun pscope-indent-or-complete ()
+"Indent the current line and, if indentation doesn't move point,
+complete the symbol around point.  This function is intended to
+be bound to TAB."
+  (interactive)
+  (let ((pos (point)))
+    (cperl-indent-command)
+    (when (= pos (point))
+      (pscope-complete-symbol))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; IPL -- interact with perl.
 
@@ -389,6 +503,9 @@ the current line and display the result."
        (format "\n%S\n"
 	   (perl-eval str (if scalarp 'scalar-context 'list-context)))))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Miscellany
+
 (defun my-perl-frob-region (pre post beg end replace-p)
   (let* ((exp (concat pre "\""
 		      (shell-quote-argument (buffer-substring beg end))
@@ -430,6 +547,12 @@ prefix arg, replace the region with the result."
   (my-perl-frob-region "{ local $_ = "
 		       (concat "; do { " expr ";}; $_ }")
 		       beg end replace-p))
+
+(defvar w3m-perldoc-history nil)
+(defun w3m-perldoc-this (thing)
+  "View perldoc for module at point."
+  (interactive (list (pscope-interactive-arg 'module)))
+  (w3m-perldoc thing))
 
 (provide 'pscope)
 ;;; pscope.el ends here

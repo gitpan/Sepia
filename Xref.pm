@@ -92,15 +92,17 @@ our %file_modules;
 
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT_OK =
+my @most = qw(redefined forget rebuild callers callees defs
+	      var_defs var_uses package_subs mod_file file_modules
+	      apropos var_apropos mod_apropos file_apropos);
+our @EXPORT_OK = (@most,
     qw(xref_definitions xref_object xref_main
-       redefined forget rebuild
-       %call %def %callby %package_sub
-       callers callees defs);
+       %call %callby %def %package_sub
+       %var_use %var_def %module_files %file_modules));
 
 our %EXPORT_TAGS =
     (all => \@EXPORT_OK,
-     most => [qw(redefined forget rebuild callers callees defs)]);
+     most => \@most);
 
 sub UNKNOWN { ["?", "?", "?"] }
 
@@ -554,10 +556,8 @@ Recompute xref info for each of of C<@funcs>.
 =cut
 
 sub redefined {
-    for my $obj (@_) {
-	forget $obj;
-	xref_object($obj);
-    }
+    forget @_;
+    xref_object $_ for @_;
 }
 
 sub _ret_list {
@@ -678,7 +678,7 @@ Find subs matching C<$expr>.
 =cut
 
 sub _apropos {
-    my ($h, $re) = @_;
+    my ($h, $re, $mod) = @_;
     my @r = do {
 	if($re) {
 	    $re = qr/$re/;
@@ -687,6 +687,12 @@ sub _apropos {
 	    sort keys %$h;
 	}
     };
+#     if ($mod) {
+# 	@r = grep {
+# 	    !exists($h->{$_}{package})
+# 		|| ($h->{$_}{package} eq $module_files);
+# 	} @r;
+#     }
     return wantarray ? @r : \@r;
 }
 
