@@ -1,14 +1,28 @@
+2004-04-04  Sean O'Rourke  <seano@cs.ucsd.edu>
+
+	* Sepia.jpg: don't ask -- just look.
+	
+	* sepia.el (sepia-ident-at-point): fixed bug with sigils.
+	(sepia-complete-symbol): fixed bug with undefined function
+	sepia-end-of-word.  
+	Always use Data::Dumper.
+
+	* any-repl.el: new file implementing REPL, basically stolen from
+	Slime.
+
+	* pscope.el: renamed to sepia.el to go with name change.
+
 2004-04-03  Sean O'Rourke  <seano@cs.ucsd.edu>
 
-	* pscope.el: (pscope-set-found): remove locations with no
-	  file in package "main", which were causing errors before.
-	  (pscope-dwim): new function.  New functions
-	  pscope-complete-symbol and pscope-indent-or-complete for
-	  symbol completion.  Not well-tested, but they seem to work.
-	  The most annoying thing is that since the Xref db isn't
-	  automatically updated, it won't always know as much as you
-	  expect.
-	  (pscope-load-file): new function.
+	* pscope.el (pscope-set-found): remove locations with no
+	file in package "main", which were causing errors before.
+	(pscope-dwim): new function.  New functions
+	pscope-complete-symbol and pscope-indent-or-complete for
+	symbol completion.  Not well-tested, but they seem to work.
+	The most annoying thing is that since the Xref db isn't
+	automatically updated, it won't always know as much as you
+	expect.
+	(pscope-load-file): new function.
 
 	* Xref.pm: update export lists to reflect new functions.
 
@@ -17,8 +31,8 @@
 	* Xref.pm: minor cleanup.
 
 	* pscope.el: pass module, file, line to Perl side (where it's
-	  ignored for now); fix line number refinement to be a
-	  little less over-eager; fix pscope-callees to go to sub
-	  definitions instead of call sites.
-
+	ignored for now); fix line number refinement to be a
+	little less over-eager; fix pscope-callees to go to sub
+	definitions instead of call sites.
+	
 	* README: added TODO section.

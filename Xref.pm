@@ -35,8 +35,7 @@ use strict;
 use Config;
 use Cwd 'abs_path';
 use B qw(peekop class comppadlist main_start svref_2object walksymtable
-         OPpLVAL_INTRO SVf_POK OPpOUR_INTRO cstring
-        );
+         OPpLVAL_INTRO SVf_POK OPpOUR_INTRO OPf_MOD cstring);
 
 =head2 Variables
 
@@ -202,7 +201,7 @@ sub process {
     my ($pack, $type, $name) = @$var;
     my $pack = realpack($pack);
     if ($type eq "*") {
-	if ($event eq "used") {
+	if ($event eq "used" || $event eq 'set') {
 	    return;
 	} elsif ($event eq "subused") {
 	    $type = "&";
@@ -265,12 +264,13 @@ sub process {
 	      sub => $sname
 	    },
 		$file, $line, $pack;
-	} elsif ($event eq 'used') {
+	} elsif ($event eq 'used' || $event eq 'set') {
 	    add_use $var_use{$name},
 	    { file => $file,
 	      package => $spack,
 	      line => $line,
 	      sub => $sname,
+	      assign => ($event eq 'set'),
 	    },
 		$file, $line;
 	}
@@ -421,8 +421,11 @@ sub pp_gvsv {
 	$gv = $op->gv;
 	$top = [$gv->STASH->NAME, '$', $gv->SAFENAME];
     }
-    process($top, $op->private & OPpLVAL_INTRO ||
-                  $op->private & OPpOUR_INTRO   ? "intro" : "used");
+    process($top,
+	    ($op->private & OPpLVAL_INTRO
+	     || $op->private & OPpOUR_INTRO) ? "intro"
+	    : ($op->flags & (32|OPf_MOD)) ? "set" # XXX:
+	    : "used");
 }
 
 sub pp_gv {
