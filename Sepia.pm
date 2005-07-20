@@ -1,11 +1,12 @@
 package Sepia;
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 require Exporter;
 our @ISA = qw(Exporter);
 
 use strict;
 use Cwd 'abs_path';
+# Hack to make Module::Info a soft requirement:
 use Module::Info;
 use B;
 
@@ -14,7 +15,7 @@ sub _apropos_re($)
     # Do that crazy multi-word identifier completion thing:
     my $re = shift;
     if ($re !~ /[^\w\d_^:]/) {
-	$re =~ s/(?<=[A-Za-z\d])([^A-Za-z\d])/[A-Za-z\\d]*$1+/g;
+	$re =~ s/(?<=[A-Za-z\d])(([^A-Za-z\d])\2*)/[A-Za-z\\d]*$1+/g;
     }
     qr/$re/;
 }
@@ -33,14 +34,14 @@ sub completions
     no strict;
     my ($str, $pack) = @_;
     if (my ($pfx, $name) = $str =~ /^([\%\$\@]?)(.+)/) {
-        my @nameparts = split /:+/, $name;
+        my @nameparts = split /:+/, $name, 1000;
         if (@nameparts == 1 && $pack) {
             @nameparts = (split(/:+/, $pack), $name);
         }
         local *_completions = sub {
             no strict;
             my ($stash, $part, @rest) = @_;
-            $part = join '[^_]*_', split /_/, $part;
+            $part = join '[^_]*_', split /_/, $part, 1000;
             $part = _apropos_re($part);
             if (@rest) {
                 map {
@@ -81,8 +82,12 @@ sub location
                 print STDERR "Sorry -- can't lookup variables.";
                 [];
             } else {
+                # XXX: svref_2object only seems to work with a package
+                # tacked on, but that should probably be done
+                # elsewhere...
+                $name = 'main::'.$name unless $name =~ /::/;
                 my $cv = B::svref_2object(\&{$name});
-                if ($cv && ($cv = $cv->START) && !$cv->isa('B::NULL')) {
+                if ($cv && defined($cv = $cv->START) && !$cv->isa('B::NULL')) {
                     my ($file, $line) = ($cv->file, $cv->line);
                     if ($file !~ /^\//) {
                         for (@INC) {
@@ -95,9 +100,13 @@ sub location
                     my ($shortname) = $name =~ /^(?:.*::)([^:]+)$/;
                     [Cwd::abs_path($file), $line, $shortname || $name]
                 } else {
+#                     print STDERR "Bad CV for $name: $cv";
                     [];
                 }
             }
+        } else {
+#             print STDERR "Name `$str' doesn't match.";
+            []
         }
     } @_
 }
@@ -110,34 +119,6 @@ non-package part of C<$name> is a regular expression.
 
 =cut
 
-sub apropos
-{
-    no strict;
-    my ($it, $re) = @_;
-    if ($it =~ /^(.*::)([^:]+)$/) {
-        my ($stash, $name) = @_;
-        if ($re) {
-            my $name = qr/$name/;
-            map {
-                "$stash$name"
-            }
-            grep {
-                /$name/ && defined &{"$stash$name"}
-            } keys %$stash;
-        } else {
-            defined &$it ? $it : ();
-        }
-    } else {
-        my @ret;
-        my $findre = $re ? qr/$it/ : qr/^\Q$it\E$/;
-        print STDERR "Searching for $findre...";
-        my_walksymtable {
-            push @ret, "$stash$_" if /$findre/;
-        } '::';
-        map { s/^(?::*main)?:://;$_ } @ret;
-    }
-}
-
 sub my_walksymtable(&*)
 {
     no strict;
@@ -148,6 +129,44 @@ sub my_walksymtable(&*)
         _walk("$stash$_") for grep /(?<!main)::$/, keys %$stash;
     };
     _walk($st);
+}
+
+sub apropos
+{
+    my ($it, $re, @types) = @_;
+    my $stashp;
+    if (@types) {
+        $stashp = grep /STASH/, @types;
+        @types = grep !/STASH/, @types;
+    } else {
+        @types = qw(CODE);
+    }
+    no strict;
+    if ($it =~ /^(.*::)([^:]+)$/) {
+        my ($stash, $name) = ($1, $2);
+        if ($re) {
+            my $name = qr/^$name/;
+            map {
+                "$stash$_"
+            }
+            grep {
+                my $stashnm = "$stash$_";
+                /$name/ &&
+                    (($stashp && /::$/)
+                     || scalar grep { defined *{$stashnm}{$_} } @types)
+            } keys %$stash;
+        } else {
+            defined &$it ? $it : ();
+        }
+    } else {
+        my @ret;
+        my $findre = $re ? qr/$it/ : qr/^\Q$it\E$/;
+#         print STDERR "Searching for $findre...";
+        my_walksymtable {
+            push @ret, "$stash$_" if /$findre/;
+        } '::';
+        map { s/^:*(?:main:+)*//;$_ } @ret;
+    }
 }
 
 =item C<@names = mod_subs($pack)>
@@ -178,7 +197,7 @@ sub mod_decls
     my $pack = shift;
     no strict 'refs';
     my @ret = map {
-	my $sn = $_->[2];
+	my $sn = $_;
 	my $proto = prototype(\&{"$pack\::$sn"});
 	$proto = defined($proto) ? "($proto)" : '';
 	"sub $sn $proto;\n";
@@ -228,10 +247,37 @@ sub mod_file
     $m ? $INC{"$m.pm"} : undef;
 }
 
+=item C<lexicals($subname)>
+
+Return a list of C<$subname>'s lexical variables.  Note that this
+includes all nested scopes -- I don't know if or how Perl
+distinguishes inner blocks.
+
+=cut
+
+sub lexicals
+{
+    my $cv = B::svref_2object(\&{+shift});
+    return unless $cv && ($cv = $cv->PADLIST);
+    my ($names, $vals) = $cv->ARRAY;
+    map {
+        my $name = $_->PV; $name =~ s/\0.*$//; $name
+    } grep B::class($_) ne 'SPECIAL', $names->ARRAY;
+}
+
 ######################################################################
 ## XXX: this is the only part that depends on Emacs:
 
-{ package EL; use Emacs::Lisp; }
+{ package EL;
+  use Emacs::Lisp;
+  ## XXX: "submit a patch" to use (message ...) correctly -- message's
+  ## first argument is actually a format, not a plain string.
+  sub Emacs::Minibuffer::WRITE {
+      my ($stream, $output, $length, $offset) = @_;
+      Emacs::Lisp::message ('%s', substr ($output, $offset, $length));
+      return ($length);
+  }
+}
 
 =item C<$func = emacs_warner($bufname)>
 
