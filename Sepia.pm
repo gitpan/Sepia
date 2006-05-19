@@ -1,5 +1,5 @@
 package Sepia;
-$VERSION = '0.61';
+$VERSION = '0.62';
 @ISA = qw(Exporter);
 
 require Exporter;
@@ -377,7 +377,7 @@ Behavior is controlled in part through the following package-globals:
 
 =cut
 
-use vars qw($PS1 $ps1 $dies $stopdie $stopwarn $fancy %REPL);
+use vars qw($PS1 $ps1 $dies $stopdie $stopwarn $fancy %REPL $PACKAGE);
 BEGIN {
     no strict;
     $ps1 = $PS1 = "> ";
@@ -385,6 +385,7 @@ BEGIN {
     $stopdie = 1;
     $stopwarn = 0;
     $fancy = 1;
+    $PACKAGE = 'main';
     *REALDIE = *CORE::GLOBAL::die;
     *REALWARN = *CORE::GLOBAL::warn;
     %REPL = (h => \&Sepia::repl_help,
@@ -450,8 +451,14 @@ EOS
 
 sub repl_chdir
 {
-    my $dir = shift;
-    chdir $dir;
+    chomp(my $dir = shift);
+    if (-d $dir) {
+        chdir $dir;
+        my $ecmd = '(cd "'.Cwd::getcwd().'")';
+        print ";;;###".length($ecmd)."\n$ecmd\n";
+    } else {
+        warn "Can't chdir\n";
+    }
     0;
 }
 
@@ -483,7 +490,10 @@ sub repl_eval
 {
     my ($buf, $wantarray) = @_;
     no strict;
-    $buf = "do { package $PACKAGE; $buf }";
+    $buf = "do { package $PACKAGE; no strict; $buf }";
+#     open O, ">>/tmp/blah";
+#     print O "##############################\n$buf";
+#     close O;
     if ($wantarray || !defined($wantarray)) {
         eval $buf;
     } else {
@@ -553,6 +563,9 @@ sub repl
                 }
             }
             my (@res, @warn);
+            local $SIG{__WARN__} = sub {
+                push @warn, shift;
+            };
             if ($buf =~ /^,(\S+)\s*(.*)/s) {
                 ## Inspector shortcuts
                 if (exists $Sepia::REPL{$1}) {
@@ -569,9 +582,6 @@ sub repl
                 }
             } else {
                 ## Ordinary eval
-                local $SIG{__WARN__} = sub {
-                    push @warn, shift;
-                };
                 @res = repl_eval $buf, wantarray;
 
                 if ($@) {
@@ -610,7 +620,7 @@ sub repl
 
 sub perl_eval
 {
-    tolisp(eval shift);
+    tolisp(repl_eval(shift));
 }
 
 1;

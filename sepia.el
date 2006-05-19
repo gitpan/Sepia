@@ -888,9 +888,9 @@ rebuild its Xrefs."
 (defun sepia-eval-no-run (string &optional discard collect-warnings)
   (condition-case err
       (sepia-eval
-       (concat "BEGIN { use B; B::minus_c(); $^C=1; } { "
+       (concat "\nBEGIN { use B; B::minus_c(); $^C=1; } { "
                string
-               "} BEGIN { die \"ok\\n\" }")
+               "}\nBEGIN { die \"ok\\n\" }")
        discard collect-warnings)
     (perl-error (if (string-match "^ok\n" (cadr err))
                     nil
