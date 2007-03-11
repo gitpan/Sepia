@@ -1,0 +1,14 @@
+MANIFEST
+ChangeLog
+Makefile.PL
+README
+Sepia.jpg
+lib/Sepia.pm
+lib/Sepia/Xref.pm
+sepia-ido.el
+sepia-tree.el
+sepia-w3m.el
+sepia.el
+test.pl
+ChangeLog
+META.yml                                 Module meta-data (added by MakeMaker)
