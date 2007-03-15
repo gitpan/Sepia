@@ -402,30 +402,32 @@ symbol at point."
 (defun sepia-show-locations (locs)
   (when locs
     (pop-to-buffer (get-buffer-create "*sepia-places*"))
-    (erase-buffer)
-    (dolist (loc (sort locs (lambda (a b)
-			      (or (string< (car a) (car b))
-				  (and (string= (car a) (car b))
-				       (< (second a) (second b)))))))
-      (destructuring-bind (file line name &rest blah) loc
-	(let ((str (ifa (find-buffer-visiting file)
-			(with-current-buffer it
-			  (ifa sepia-found-refiner
-			       (funcall it line name)
-			       (goto-line line))
-			  (message "line for %s was %d, now %d" name line
-				   (line-number-at-pos))
-			  (setq line (line-number-at-pos))
-                          (let ((tmpstr
-                                 (buffer-substring (my-bol-from (point))
-                                                   (my-eol-from (point)))))
-                            (if (> (length tmpstr) 60)
-                                (concat "\n    " tmpstr)
-                                tmpstr)))
-			"...")))
-	  (insert (format "%s:%d:%s\n" (abbreviate-file-name file) line str)))))
-    (grep-mode)
-    (goto-char (point-min))))
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (dolist (loc (sort (remove nil locs) ; XXX where's nil from?
+                         (lambda (a b)
+                           (or (string< (car a) (car b))
+                               (and (string= (car a) (car b))
+                                    (< (second a) (second b)))))))
+        (destructuring-bind (file line name &rest blah) loc
+          (let ((str (ifa (find-buffer-visiting file)
+                          (with-current-buffer it
+                            (ifa sepia-found-refiner
+                                 (funcall it line name)
+                                 (goto-line line))
+                            (message "line for %s was %d, now %d" name line
+                                     (line-number-at-pos))
+                            (setq line (line-number-at-pos))
+                            (let ((tmpstr
+                                   (buffer-substring (my-bol-from (point))
+                                                     (my-eol-from (point)))))
+                              (if (> (length tmpstr) 60)
+                                  (concat "\n    " tmpstr)
+                                  tmpstr)))
+                          "...")))
+            (insert (format "%s:%d:%s\n" (abbreviate-file-name file) line str)))))
+      (grep-mode)
+      (goto-char (point-min)))))
 
 (defun sepia-filter-by-module (x)
   "Filter to limit hits by module only."
