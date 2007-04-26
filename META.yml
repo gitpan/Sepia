@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Sepia
-version:             0.69
+version:             0.70
 abstract:            Simple Emacs-Perl InterAction
 license:             ~
 generated_by:        ExtUtils::MakeMaker version 6.31
@@ -8,9 +8,7 @@ distribution_type:   module
 requires:     
     B::Module::Info:               0
     Data::Dumper:                  0
-    PadWalker:                     1
     Scalar::Util:                  0
-    Sub::Uplevel:                  0
 meta-spec:
     url:     http://module-build.sourceforge.net/META-spec-v1.2.html
     version: 1.2
