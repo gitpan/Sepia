@@ -6,7 +6,7 @@ Sepia - Simple Emacs-Perl Interface
 
 =cut
 
-$VERSION = '0.70';
+$VERSION = '0.71';
 @ISA = qw(Exporter);
 
 require Exporter;
@@ -17,12 +17,35 @@ use Module::Info;
 use Text::Abbrev;
 use Carp;
 use B;
+
+use vars qw($PS1 $dies $STOPDIE $STOPWARN %REPL %RK %REPL_DOC
+            $PACKAGE $WANTARRAY $PRINTER $STRICT);
+
 BEGIN {
     eval { require PadWalker; import PadWalker qw(peek_my) };
     if ($@) {
         *peek_my = sub { +{ } };
     }
+    eval { require Lexical::Persistence; import Lexical::Persistence };
+    if ($@) {
+        *repl_strict = sub {
+            print STDERR "Strict mode requires Lexical::Persistence.\n";
+            0;
+        };
+    } else {
+        *repl_strict = sub {
+            my $x = as_boolean(shift, $STRICT);
+            if ($x && !$STRICT) {
+                $STRICT = new Lexical::Persistence;
+            } elsif (!$x) {
+                undef $STRICT;
+            }
+            0;
+        };
+    }
 }
+
+=over 4
 
 =item C<@compls = completions($string [, $type])>
 
@@ -515,10 +538,10 @@ Behavior is controlled in part through the following package-globals:
 
 =item C<$PRINTER> -- result printer (default: print_dumper)
 
+=back
+
 =cut
 
-use vars qw($PS1 $dies $STOPDIE $STOPWARN %REPL %RK
-            $PACKAGE $WANTARRAY $PRINTER);
 BEGIN {
     no strict;
     $PS1 = "> ";
@@ -530,11 +553,32 @@ BEGIN {
     $PRINTER = \&Sepia::print_dumper;
     %REPL = (help => \&Sepia::repl_help,
              cd => \&Sepia::repl_chdir,
+             methods => \&Sepia::repl_methods,
              package => \&Sepia::repl_package,
              who => \&Sepia::repl_who,
              wantarray => \&Sepia::repl_wantarray,
              format => \&Sepia::repl_format,
+             strict => \&Sepia::repl_strict,
          );
+    %REPL_DOC = (
+        cd =>
+    'cd DIR            Change directory to DIR',
+        format =>
+    'format [dumper|dump|yaml|plain]
+                       Set output formatter (default: dumper)',
+        help =>
+    'help               Display this message',
+        methods =>
+    'methods X          List methods for reference or package X',
+        package =>
+    'package PACKAGE    Set evaluation package to PACKAGE',
+        strict =>
+    'strict [0|1]       Turn \'use strict\' mode on or off',
+        wantarray =>
+    'wantarray [0|1]    Set or toggle evaluation context',
+        who =>
+    'who PACKAGE        List variables and subs in PACKAGE',
+    );
     %RK = abbrev keys %REPL;
 }
 
@@ -587,17 +631,11 @@ sub debug_inspect
 
 sub repl_help
 {
-    print <<EOS;
-REPL commands (prefixed with ','):
-    cd DIR             Change directory to DIR
-    define
-    format [dumper|dump|yaml|plain]
-                       Set output formatter (default: dumper)
-    help               Display this message
-    package PACKAGE    Set evaluation package to PACKAGE
-    wantarray [0|1]    Set or toggle evaluation context
-    who PACKAGE        List variables and subs in PACKAGE
-EOS
+    print "REPL commands (prefixed with ','):\n";
+    for (sort keys %REPL) {
+        print "    ",
+            exists $REPL_DOC{$_} ? "$REPL_DOC{$_}\n": "$_    (undocumented)\n";
+    }
     0;
 }
 
@@ -654,10 +692,37 @@ sub repl_who
     0;
 }
 
-sub repl_wantarray
+sub methods
+{
+    my $pack = shift;
+    no strict;
+    (grep(defined &{"$pack\::$_"}, keys %{$pack.'::'}),
+     defined @{$pack.'::ISA'} ? (map methods($_), @{$pack.'::ISA'}) : ());
+}
+
+sub repl_methods
 {
     my $x = shift;
-    $WANTARRAY = defined $x ? $x : !$WANTARRAY;
+    $x =~ s/^\s+//;
+    $x =~ s/\s+$//;
+    if ($x =~ /^\$/) {
+        $x = eval "ref $x";
+        return 1 if $@;
+    }
+    Sepia::printer [methods $x];
+    0;
+}
+
+sub as_boolean
+{
+    my ($val, $cur) = @_;
+    $val =~ s/\s+//g;
+    length($val) ? $val : !$cur;
+}
+
+sub repl_wantarray
+{
+    $WANTARRAY = as_boolean shift, $WANTARRAY;
     0;
 }
 
@@ -704,15 +769,25 @@ sub repl_eval
     my ($buf, $wantarray, $pkg) = @_;
     no strict;
     local $PACKAGE = $pkg || $PACKAGE;
-    $buf = "do { package $PACKAGE; no strict; $buf }";
-    my $wa = $WANTARRAY;
-    if (!defined $wa) {
-        $wa = wantarray ? 'ARRAY' : 'SCALAR';
-    }
-    if ($wa) {
-        eval $buf;
+    if ($STRICT) {
+        if (!$WANTARRAY) {
+            $buf = 'scalar($buf)';
+        }
+        my $ctx = join(',', keys %{$STRICT->get_context('_')});
+        $ctx = $ctx ? "my ($ctx);" : '';
+        $buf = eval "sub { package $PACKAGE; use strict; $ctx $buf }";
+        if ($@) {
+            print STDERR "ERROR\n$@\n";
+            return;
+        }
+        $STRICT->call($buf);
     } else {
-        scalar eval $buf;
+        $buf = "do { package $PACKAGE; no strict; $buf }";
+        if ($WANTARRAY) {
+            eval $buf;
+        } else {
+            scalar eval $buf;
+        }
     }
 }
 
@@ -814,7 +889,7 @@ sub repl
                     if ($@ =~ /at EOF$/m) {
                         ## Possibly-incomplete line
                         if ($in eq "\n") {
-                            print "*** cancel ***\n", prompt;
+                            print "Error:\n$@\n*** cancel ***\n", prompt;
                             $buf = '';
                         } else {
                             print ">> ";
