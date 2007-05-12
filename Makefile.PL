@@ -12,7 +12,8 @@ WriteMakefile(
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
      (AUTHOR     => "Sean O'Rourke <seano\@cpan.org>",
       ABSTRACT => 'Simple Emacs-Perl InterAction')
-     : ())
+     : ()),
+    LICENSE => 'perl'
 );
 
 print <<EOS;

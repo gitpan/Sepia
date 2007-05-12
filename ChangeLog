@@ -1,3 +1,8 @@
+2007-05-12  Sean O'Rourke  <sorourke@cs.ucsd.edu>
+
+	* VERSION: 0.72
+	* Makefile.PL: add license.
+
 2007-05-09  Sean O'Rourke  <sorourke@cs.ucsd.edu>
 
 	* VERSION: 0.71
