@@ -17,7 +17,7 @@ At the prompt in the C<*perl-interaction*> buffer:
 
 =cut
 
-$VERSION = '0.73';
+$VERSION = '0.74';
 @ISA = qw(Exporter);
 
 require Exporter;
@@ -96,7 +96,6 @@ sub _apropos_re($)
 sub _completions1
 {
     no strict;
-    print STDERR "_completions1(@_)\n";
     my $stash = shift;
     my $re = shift || '';
     $re = qr/$re/;
@@ -123,45 +122,55 @@ sub completions
 {
     no strict;
     my ($str, $type, $infunc) = @_;
-    my @ret = map { s/^:://; $_ } ($type ? do {
-        (grep { defined *{$_}{$type} } _completions $str),
-            (defined $infunc && defined *{$infunc}{CODE}) ? do {
-                my ($apre) = _apropos_re($str);
-                my $st = $sigil{$type};
-                grep {
-                    (my $tmp = $_) =~ s/^\Q$st//;
-                    $tmp =~ /$apre/;
-                } lexicals($infunc);
-            } : ();
-    } : do {
-        grep {
+    my @ret;
+
+    if (!$type) {
+        @ret = grep {
             defined *{$_}{CODE} || defined *{$_}{IO}
                 || (/::$/ && defined *{$_}{HASH});
         } _completions $str;
-    });
+    } else {
+        @ret = grep {
+            $type eq 'SCALAR' ? defined ${$_} : defined *{$_}{$type}
+        } _completions $str;
+        if (defined $infunc && defined *{$infunc}{CODE}) {
+            my ($apre) = _apropos_re($str);
+            my $st = $sigil{$type};
+            push @ret, grep {
+                (my $tmp = $_) =~ s/^\Q$st//;
+                $tmp =~ /$apre/;
+            } lexicals($infunc);
+        }
+    }
+
+    ## Complete "simple" sequences as abbreviations, e.g.:
+    ##   wtci -> Want_To_Complete_It, NOT
+    ##        -> WaTCh_trIpe
     if (!@ret && $str !~ /[^\w\d]/) {
-        ## Complete "simple" sequences as abbreviations, e.g.:
-        ##   wtci -> Want_To_Complete_It, NOT
-        ##        -> WaTCh_trIpe
         my $broad = join '.*', map "\\b$_", split '', $str;
-        @ret = map { s/^:://; $_ } ($type ? do {
-            (grep { defined *{$_}{$type} } _completions1 '::', qr/$broad/),
-                (defined $infunc && defined *{$infunc}{CODE}) ? do {
-                    my ($apre) = _apropos_re($str);
-                    my $st = $sigil{$type};
-                    grep {
-                        (my $tmp = $_) =~ s/^\Q$st//;
-                        $tmp =~ /$apre/;
-                    } lexicals($infunc);
-                } : ();
-        } : do {
-            grep {
+        if ($type) {
+            @ret = grep {
                 defined *{$_}{CODE} || defined *{$_}{IO}
                     || (/::$/ && defined *{$_}{HASH});
             } _completions1 '::', qr/$broad/;
-        })
+        } else {
+            @ret = grep {
+                $type eq 'SCALAR' ? defined ${$_} : defined *{$_}{$type}
+            } _completions1 '::', qr/$broad/;
+        }
+        if (defined $infunc && defined *{$infunc}{CODE}) {
+            my $st = $sigil{$type};
+            grep {
+                (my $tmp = $_) =~ s/^\Q$st//;
+                $tmp =~ /$broad/;
+            } lexicals($infunc);
+        }
     }
-    @ret;
+    ## XXX: Control characters, $", and $1, etc. confuse Emacs, so
+    ## remove them.
+    grep {
+        !looks_like_number $_ && !/^[^\w\d_]$/ && !/^_</ && !/^[[:cntrl:]]/
+    } map { s/^:://; $_ } @ret;
 }
 
 =head2 C<@locs = location(@names)>
@@ -366,7 +375,7 @@ sub inst()
 
 sub package_list
 {
-    sort inst->modules;
+    sort { $a cmp $b } inst()->modules;
 }
 
 =head2 C<@mods = module_list>
@@ -985,6 +994,83 @@ EOS
 sub perl_eval
 {
     tolisp(repl_eval(shift));
+}
+
+=head2 C<$status = html_module_list($file [, $prefix])>
+
+Generate an HTML list of installed modules, looking inside of
+packages.  If C<$prefix> is missing, uses "about://perldoc/".
+
+=head2 C<$status = html_package_list($file [, $prefix])>
+
+Generate an HTML list of installed top-level modules, without looking
+inside of packages.  If C<$prefix> is missing, uses
+"about://perldoc/".
+
+=cut
+
+sub html_module_list
+{
+    my ($file, $base) = @_;
+    $base ||= 'about://perldoc/';
+    my $inst = inst();
+    return unless $inst;
+    return unless open OUT, ">$file";
+    print "<html><body><ul>";
+    my $pfx = '';
+    my %ns;
+    for (package_list) {
+        push @{$ns{$1}}, $_ if /^([^:]+)/;
+    }
+    for (sort keys %ns) {
+        print qq{<li><b>$_</b><ul>} if @{$ns{$_}} > 1;
+        for (sort @{$ns{$_}}) {
+            my @fs = map {
+                s/.*man.\///; s|/|::|g; s/\..?pm//; $_
+            } grep /\.\dpm$/, sort $inst->files($_);
+            if (@fs == 1) {
+                print qq{<li><a href="$base$fs[0]">$fs[0]</a>};
+            } else {
+                print qq{<li>$_<ul>};
+                for (@fs) {
+                    print qq{<li><a href="$base$_">$_</a>};
+                }
+                print '</ul>';
+            }
+        }
+        print qq{</ul>} if @{$ns{$_}} > 1;
+    }
+    print "</ul></body></html>\n";
+    close OUT;
+    1;
+}
+
+sub html_package_list
+{
+    my ($file, $base) = @_;
+    return unless inst();
+    $base ||= 'about://perldoc/';
+    return unless open OUT, ">$file";
+    print OUT "<html><body><ul>";
+    my $pfx = '';
+    my %ns;
+    for (package_list) {
+        push @{$ns{$1}}, $_ if /^([^:]+)/;
+    }
+    for (sort keys %ns) {
+        if (@{$ns{$_}} == 1) {
+            print OUT
+                qq{<li><a href="$base$ns{$_}[0]">$ns{$_}[0]</a>};
+        } else {
+            print OUT qq{<li><b>$_</b><ul>};
+            print OUT qq{<li><a href="$base$_">$_</a>}
+                for sort @{$ns{$_}};
+            print OUT qq{</ul>};
+        }
+    }
+    print OUT "</ul></body></html>\n";
+    close OUT;
+    1;
 }
 
 1;
