@@ -17,7 +17,7 @@ At the prompt in the C<*perl-interaction*> buffer:
 
 =cut
 
-$VERSION = '0.74';
+$VERSION = '0.75';
 @ISA = qw(Exporter);
 
 require Exporter;
@@ -30,7 +30,7 @@ use Carp;
 use B;
 
 use vars qw($PS1 $dies $STOPDIE $STOPWARN %REPL %RK %REPL_DOC
-            $PACKAGE $WANTARRAY $PRINTER $STRICT);
+            $PACKAGE $WANTARRAY $PRINTER $STRICT $PRINT_PRETTY);
 
 BEGIN {
     eval { require PadWalker; import PadWalker qw(peek_my) };
@@ -493,7 +493,7 @@ sub print_dumper
 sub print_plain
 {
     no strict;
-    $::__ = "@res";
+    "@res";
 }
 
 sub print_yaml
@@ -523,19 +523,24 @@ sub printer
     no strict;
     local *res = shift;
     my ($iseval, $wantarray) = @_;
-    @__ = @res;
+    @::__ = @res;
+    $::__ = @res == 1 ? $res[0] : [@res];
     my $str;
     if ($iseval) {
-        $::__ = "@res";
+        $res = "@res";
     } elsif (@res == 1 && (ref $res[0]) =~ /^PDL/) {
-        $::__ = "$res[0]";
+        $res = $res[0];
+    } elsif (!$iseval && $PRINT_PRETTY && @res > 1 && grep !ref $_, @res) {
+        $res = columnate(@res);
+        print $res;
+        return;
     } else {
-        $::__ = $PRINTER->();
+        $res = $PRINTER->();
     }
     if ($iseval) {
-        print ';;;', length $::__, "\n$::__\n";
+        print ';;;', length $res, "\n$::__\n";
     } else {
-        print "=> $::__\n";
+        print "=> $res\n";
     }
 }
 
@@ -570,6 +575,11 @@ Behavior is controlled in part through the following package-globals:
 
 =item C<$WANTARRAY> -- evaluation context
 
+=item C<$PRINT_PRETTY> -- format some output nicely (default = 0)
+
+Format some values nicely, independent of $PRINTER.  Currently, this
+displays arrays of scalars as columns.
+
 =item C<%REPL> -- maps shortcut names to handlers
 
 =item C<%REPL_DOC> -- maps shortcut names to documentation
@@ -587,6 +597,7 @@ BEGIN {
     $PACKAGE = 'main';
     $WANTARRAY = 1;
     $PRINTER = \&Sepia::print_dumper;
+    $PRINT_PRETTY = 0;
     %REPL = (help => \&Sepia::repl_help,
              cd => \&Sepia::repl_chdir,
              methods => \&Sepia::repl_methods,
@@ -733,13 +744,14 @@ sub columnate
         $len = length if $len < length;
     }
     my $nc = int($width / ($len+1)) || 1;
-    my $nr = @_ / $nc + (@_ % $nc ? 1 : 0);
-    my $fmt = ('%-'.($len+1).'s') x $nc . "\n";
+    my $nr = int(@_ / $nc) + (@_ % $nc ? 1 : 0);
+    my $fmt = ('%-'.($len+1).'s') x ($nc-1) . "%s\n";
     my @incs = map { $_ * $nr } 0..$nc-1;
     my $str = '';
-    for my $r (0..$nr) {
+    for my $r (0..$nr-1) {
         $str .= sprintf $fmt, map { $_ || '' } @_[map { $r + $_ } @incs];
     }
+    $str =~ s/ +$//m;
     $str
 }
 
@@ -753,7 +765,7 @@ sub methods
 {
     my $pack = shift;
     no strict;
-    (grep(defined &{"$pack\::$_"}, keys %{$pack.'::'}),
+    (grep(defined *{"$pack\::$_"}{CODE}, keys %{$pack.'::'}),
      defined @{$pack.'::ISA'} ? (map methods($_), @{$pack.'::ISA'}) : ());
 }
 
@@ -763,10 +775,10 @@ sub repl_methods
     $x =~ s/^\s+//;
     $x =~ s/\s+$//;
     if ($x =~ /^\$/) {
-        $x = eval "ref $x";
-        return 1 if $@;
+        $x = repl_eval("ref $x");
+        return 0 if $@;
     }
-    Sepia::printer [methods $x];
+    print columnate sort { $a cmp $b } methods $x;
     0;
 }
 
@@ -974,8 +986,9 @@ EOS
                     }
                 }
             }
-            if ($buf !~ /;$/) {
-                ## Be quiet if it ends with a semicolon.
+            if ($buf !~ /;$/ && $buf !~ /^,/) {
+                ## Be quiet if it ends with a semicolon, or if we
+                ## executed a shortcut.
                 Sepia::printer \@res, $iseval, wantarray;
             }
             $buf = '';
