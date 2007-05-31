@@ -1,0 +1,66 @@
+<html lang="en">
+<head>
+<title>Debugger - Simple Emacs Perl Integration</title>
+<meta http-equiv="Content-Type" content="text/html">
+<meta name="description" content="Simple Emacs Perl Integration">
+<meta name="generator" content="makeinfo 4.8">
+<link title="Top" rel="start" href="index.html#Top">
+<link rel="up" href="Interactive-Perl.html#Interactive-Perl" title="Interactive Perl">
+<link rel="prev" href="Shortcuts.html#Shortcuts" title="Shortcuts">
+<link rel="next" href="Evaluation.html#Evaluation" title="Evaluation">
+<link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<style type="text/css"><!--
+  pre.display { font-family:inherit }
+  pre.format  { font-family:inherit }
+  pre.smalldisplay { font-family:inherit; font-size:smaller }
+  pre.smallformat  { font-family:inherit; font-size:smaller }
+  pre.smallexample { font-size:smaller }
+  pre.smalllisp    { font-size:smaller }
+  span.sc    { font-variant:small-caps }
+  span.roman { font-family:serif; font-weight:normal; } 
+  span.sansserif { font-family:sans-serif; font-weight:normal; } 
+--></style>
+</head>
+<body>
+<div class="node">
+<p>
+<a name="Debugger"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="Evaluation.html#Evaluation">Evaluation</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="Shortcuts.html#Shortcuts">Shortcuts</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="Interactive-Perl.html#Interactive-Perl">Interactive Perl</a>
+<hr>
+</div>
+
+<h3 class="section">3.2 Debugger</h3>
+
+<p>Unfortunately Sepia does <em>not</em> use Perl's debugger hooks, so it
+does not support a true debugger with breakpoints, single-stepping, etc. 
+However, the REPL overrides the <code>die()</code> and <code>warn()</code>
+operators, allowing it to intercept failures while their context is
+still available.  This makes it possible to produce a backtrace, inspect
+and modify global variables, and continue execution.  If the PadWalker
+module is available, Sepia also provides functions to inspect and modify
+lexical variables.
+
+   <p>The debugger has its own set of shortcuts, also prefixed by a comma.
+
+     <dl>
+<dt><kbd>backtrace</kbd><dd>Show a backtrace with <code>Carp::cluck</code>.
+
+     <br><dt><kbd>inspect </kbd><var>n</var><dd>Inspect lexicals in frame <var>n</var>, counting upward (requires PadWalker).
+
+     <br><dt><kbd>eval </kbd><var>n</var> <var>expr</var><dd>Evaluate <var>expr</var> in the lexical environment of frame <var>n</var>
+(requires PadWalker).  <var>expr</var> should not transfer control out of
+this environment, but is free to modify its lexicals.
+
+     <br><dt><kbd>return </kbd><var>expr</var><dd>Continue execution as if <code>die()</code> or <code>warn()</code> had returned the
+value of <var>expr</var>, which is evaluated in the global environment.
+
+     <br><dt><kbd>die</kbd><dt><kbd>warn</kbd><dd>Continue dying or warning as the program would have done without
+debugger intervention.
+
+   </dl>
+
+   </body></html>
+

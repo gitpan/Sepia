@@ -1,0 +1,55 @@
+<html lang="en">
+<head>
+<title>Evaluation - Simple Emacs Perl Integration</title>
+<meta http-equiv="Content-Type" content="text/html">
+<meta name="description" content="Simple Emacs Perl Integration">
+<meta name="generator" content="makeinfo 4.8">
+<link title="Top" rel="start" href="index.html#Top">
+<link rel="up" href="Interactive-Perl.html#Interactive-Perl" title="Interactive Perl">
+<link rel="prev" href="Debugger.html#Debugger" title="Debugger">
+<link rel="next" href="Mutilation.html#Mutilation" title="Mutilation">
+<link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<style type="text/css"><!--
+  pre.display { font-family:inherit }
+  pre.format  { font-family:inherit }
+  pre.smalldisplay { font-family:inherit; font-size:smaller }
+  pre.smallformat  { font-family:inherit; font-size:smaller }
+  pre.smallexample { font-size:smaller }
+  pre.smalllisp    { font-size:smaller }
+  span.sc    { font-variant:small-caps }
+  span.roman { font-family:serif; font-weight:normal; } 
+  span.sansserif { font-family:sans-serif; font-weight:normal; } 
+--></style>
+</head>
+<body>
+<div class="node">
+<p>
+<a name="Evaluation"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="Mutilation.html#Mutilation">Mutilation</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="Debugger.html#Debugger">Debugger</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="Interactive-Perl.html#Interactive-Perl">Interactive Perl</a>
+<hr>
+</div>
+
+<h3 class="section">3.3 Evaluation</h3>
+
+<p>When interactive Perl is running, Sepia can evaluate regions of code in
+the inferior Perl process.  The following commands assume that this
+process has already been started by calling <code>sepia-repl</code>.
+
+     <dl>
+<dt><kbd>C-M-x</kbd><dt><kbd>M-x sepia-eval-defun</kbd><dd><a name="index-sepia_002deval_002ddefun-21"></a>Evaluate the function around point in the inferior Perl process.
+
+     <br><dt><kbd>C-c C-l</kbd><dt><kbd>M-x sepia-load-file</kbd><dd><a name="index-sepia_002dload_002dfile-22"></a>Save the current buffer, then reload its file and if warnings or errors
+occur, display an error buffer.  With a prefix argument, also rebuild
+the cross-reference index.
+
+     <br><dt><kbd>C-c e</kbd><dt><kbd>M-x sepia-eval-expression &lt;RET&gt; </kbd><var>expr</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002deval_002dexpression-23"></a>Evaluate <var>expr</var> in scalar context and echo the result.  With a
+prefix argument, evaluate in list context.
+
+     <br><dt><kbd>sepia-set-cwd</kbd><dd>
+</dl>
+
+   </body></html>
+

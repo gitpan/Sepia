@@ -9,6 +9,37 @@ sepia-ido.el
 sepia-tree.el
 sepia-w3m.el
 sepia.el
+sepia.texi
 test.pl
 ChangeLog
+# BEGIN HTML DOCUMENTATION
+sepia/Code-Navigation.html
+sepia/Completion.html
+sepia/Credits.html
+sepia/Cross_002dreference.html
+sepia/Customization.html
+sepia/Debugger.html
+sepia/Documentation.html
+sepia/Editing.html
+sepia/Emacs-Variables.html
+sepia/Evaluating-Code.html
+sepia/Evaluation.html
+sepia/Finding-Definitions.html
+sepia/Function-Index.html
+sepia/Getting-Started.html
+sepia/Interaction.html
+sepia/Interactive-Perl.html
+sepia/Internals.html
+sepia/Introduction.html
+sepia/Mutilation.html
+sepia/Navigation.html
+sepia/Overview.html
+sepia/Perl-Variables.html
+sepia/Philosophy.html
+sepia/Point-Motion.html
+sepia/Region-Processing.html
+sepia/Scratchpad.html
+sepia/Shortcuts.html
+sepia/The-Debugger.html
+sepia/index.html
 META.yml                                 Module meta-data (added by MakeMaker)

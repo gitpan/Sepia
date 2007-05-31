@@ -1,0 +1,80 @@
+<html lang="en">
+<head>
+<title>Emacs Variables - Simple Emacs Perl Integration</title>
+<meta http-equiv="Content-Type" content="text/html">
+<meta name="description" content="Simple Emacs Perl Integration">
+<meta name="generator" content="makeinfo 4.8">
+<link title="Top" rel="start" href="index.html#Top">
+<link rel="up" href="Customization.html#Customization" title="Customization">
+<link rel="prev" href="Customization.html#Customization" title="Customization">
+<link rel="next" href="Perl-Variables.html#Perl-Variables" title="Perl Variables">
+<link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<style type="text/css"><!--
+  pre.display { font-family:inherit }
+  pre.format  { font-family:inherit }
+  pre.smalldisplay { font-family:inherit; font-size:smaller }
+  pre.smallformat  { font-family:inherit; font-size:smaller }
+  pre.smallexample { font-size:smaller }
+  pre.smalllisp    { font-size:smaller }
+  span.sc    { font-variant:small-caps }
+  span.roman { font-family:serif; font-weight:normal; } 
+  span.sansserif { font-family:sans-serif; font-weight:normal; } 
+--></style>
+</head>
+<body>
+<div class="node">
+<p>
+<a name="Emacs-Variables"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="Perl-Variables.html#Perl-Variables">Perl Variables</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="Customization.html#Customization">Customization</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="Customization.html#Customization">Customization</a>
+<hr>
+</div>
+
+<h3 class="section">4.1 Emacs Variables</h3>
+
+     <dl>
+<dt><kbd>sepia-complete-methods</kbd><dd>If non-<code>NIL</code>, <code>sepia-complete-symbol</code> will complete
+simple method calls of the form <code>$x-&gt;</code> or <code>Module-&gt;</code>.  Since
+the former requires evaluation of <code>$x</code>, this can be disabled. 
+Default: <code>T</code>.
+
+     <br><dt><kbd>sepia-eval-defun-include-decls</kbd><dd>If non-<code>NIL</code>, attempt to generate a declaration list for
+<code>sepia-eval-defun</code>.  This is necessary when evaluating some code,
+such as that calling functions without parentheses, because the presence
+of declarations affects the parsing of barewords.  Default: <code>T</code>.
+
+     <br><dt><kbd>sepia-indent-expand-abbrev</kbd><dd>If non-<code>NIL</code>, <code>sepia-indent-or-complete</code> will, if
+reindentation does not change the current line, expand an abbreviation
+before point rather than performing completion.  Only if no abbreviation
+is found will it perform completion.  Default: <code>T</code>.
+
+     <br><dt><kbd>sepia-module-list-function</kbd><dd>The function to view a tree of installed modules.  Default:
+<code>w3m-find-file</code> if Emacs-w3m is installed, or
+<code>browse-url-of-buffer</code> otherwise.
+
+     <br><dt><kbd>sepia-perldoc-function</kbd><dd>The function called to view installed modules' documentation.  Default:
+<code>w3m-perldoc</code> if Emacs-w3m is installed, or <code>cperl-perldoc</code>
+otherwise.
+
+     <br><dt><kbd>sepia-perl5lib</kbd><dd>A list of directories to include in <code>PERL5LIB</code> when starting
+interactive Perl.  Default: <code>NIL</code>.
+
+     <br><dt><kbd>sepia-prefix-key</kbd><dd>The prefix to use for for functions in <code>sepia-keymap</code>.  Default:
+&lt;M-.&gt;.
+
+     <br><dt><kbd>sepia-program-name</kbd><dd>The Perl program name for interactive Perl.  Default: &ldquo;perl&rdquo;.
+
+     <br><dt><kbd>sepia-use-completion</kbd><dd>If non-<code>NIL</code>, various Sepia functions will generate completion
+candidates from interactive Perl when called interactively.  This may be
+slow or undesirable in some situations.  Default: <code>T</code>.
+
+     <br><dt><kbd>sepia-view-pod-function</kbd><dd>The function called to view the current buffer's documentation. 
+Default: <code>sepia-w3m-view-pod</code> if Emacs-w3m is available, or
+<code>sepia-perldoc-buffer</code> otherwise.
+
+</dl>
+
+   </body></html>
+

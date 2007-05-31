@@ -1,0 +1,55 @@
+<html lang="en">
+<head>
+<title>Region Processing - Simple Emacs Perl Integration</title>
+<meta http-equiv="Content-Type" content="text/html">
+<meta name="description" content="Simple Emacs Perl Integration">
+<meta name="generator" content="makeinfo 4.8">
+<link title="Top" rel="start" href="index.html#Top">
+<link rel="up" href="Code-Navigation.html#Code-Navigation" title="Code Navigation">
+<link rel="prev" href="Evaluating-Code.html#Evaluating-Code" title="Evaluating Code">
+<link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<style type="text/css"><!--
+  pre.display { font-family:inherit }
+  pre.format  { font-family:inherit }
+  pre.smalldisplay { font-family:inherit; font-size:smaller }
+  pre.smallformat  { font-family:inherit; font-size:smaller }
+  pre.smallexample { font-size:smaller }
+  pre.smalllisp    { font-size:smaller }
+  span.sc    { font-variant:small-caps }
+  span.roman { font-family:serif; font-weight:normal; } 
+  span.sansserif { font-family:sans-serif; font-weight:normal; } 
+--></style>
+</head>
+<body>
+<div class="node">
+<p>
+<a name="Region-Processing"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="Evaluating-Code.html#Evaluating-Code">Evaluating Code</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="Code-Navigation.html#Code-Navigation">Code Navigation</a>
+<hr>
+</div>
+
+<h3 class="section">2.4 Region Processing</h3>
+
+<p>Sepia contains several functions to operate on regions of text using the
+interactive Perl process.  These functions can be used like standard
+one-liners (e.g. `<samp><span class="samp">perl -pe ...</span></samp>'), with the advantage that all of
+the functions and variables in the interactive session are available.
+
+     <dl>
+<dt><kbd>M-x sepia-perl-pe-region &lt;RET&gt; </kbd><var>code</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dperl_002dpe_002dregion-1"></a>Evaluate <var>code</var> on each line in the region with <code>$_</code> bound to
+the line text, collecting the resulting values of <code>$_</code>.  With a
+prefix argument, replace the region with the result.
+
+     <br><dt><kbd>M-x sepia-perl-ne-region &lt;RET&gt; </kbd><var>code</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dperl_002dne_002dregion-2"></a>Evaluate <var>code</var> as above, but collect the <em>results</em> of code.
+
+     <br><dt><kbd>M-x sepia-perlize-region &lt;RET&gt; </kbd><var>code</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dperlize_002dregion-3"></a>Evaluate <var>code</var> once with <code>$_</code> bound to the entire region,
+collecting the final value of <code>$_</code>.  With a prefix argument,
+replace the region.
+
+   </dl>
+
+<!-- ============================================================ -->
+</body></html>
+
