@@ -48,18 +48,18 @@ and do not put their results on the found-location ring.
 
 <!-- direct-jump commands -->
 <dl>
-<dt><kbd>M-. M-.</kbd><dt><kbd>M-x sepia-dwim</kbd><dd><a name="index-sepia_002ddwim-3"></a>Guess what kind of identifier is at point, and try to do the right
+<dt><kbd>M-. M-.</kbd><dt><kbd>M-x sepia-dwim</kbd><dd><a name="index-sepia_002ddwim-4"></a>Guess what kind of identifier is at point, and try to do the right
 thing: for a function, find its definition(s); for a variable, find its
 uses; for a module, view its documentation; otherwise, prompt for the
 name of a function to visit.  <code>sepia-dwim</code> automatically goes to
 the first function definition or variable use found.
 
-     <br><dt><kbd>M-. l</kbd><dt><kbd>M-x sepia-location</kbd><dd><a name="index-sepia_002dlocation-4"></a>Jump directly to the definition of the function at point, prompting if
+     <br><dt><kbd>M-. l</kbd><dt><kbd>M-x sepia-location</kbd><dd><a name="index-sepia_002dlocation-5"></a>Jump directly to the definition of the function at point, prompting if
 point is not on a symbol.  If multiple definitions are found, choose one
 arbitrarily.  This function is similar to <code>sepia-defs</code>, and the two
 should probably be merged.
 
-     <br><dt><kbd>M-. j</kbd><dt><kbd>M-x sepia-jump-to-symbol</kbd><dd><a name="index-sepia_002djump_002dto_002dsymbol-5"></a>Navigate to a function using &ldquo;ido&rdquo; interactive completion.  Within
+     <br><dt><kbd>M-. j</kbd><dt><kbd>M-x sepia-jump-to-symbol</kbd><dd><a name="index-sepia_002djump_002dto_002dsymbol-6"></a>Navigate to a function using &ldquo;ido&rdquo; interactive completion.  Within
 interactive completion, press &lt;:&gt; to descend into a package,
 &lt;DEL&gt; to ascend to a parent package, and &lt;RET&gt; to go to the
 currently-selected function.
@@ -76,19 +76,19 @@ through by calls to <code>sepia-next</code>.
 
 <!-- prompt-and-go commands -->
 <dl>
-<dt><kbd>M-. f </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-defs</kbd><dd><a name="index-sepia_002ddefs-6"></a>Find definition(s) of function <var>name</var>.
+<dt><kbd>M-. f </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-defs</kbd><dd><a name="index-sepia_002ddefs-7"></a>Find definition(s) of function <var>name</var>.
 
-     <br><dt><kbd>M-. m</kbd><dt><kbd>M-x sepia-module-find </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dmodule_002dfind-7"></a>Find the source of module <var>name</var>.
+     <br><dt><kbd>M-. m</kbd><dt><kbd>M-x sepia-module-find </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dmodule_002dfind-8"></a>Find the source of module <var>name</var>.
 
-     <br><dt><kbd>M-. a </kbd><var>regexp</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-apropos </kbd><var>regexp</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dapropos-8"></a>Find definitions of all functions whose names match <var>regexp</var>.
+     <br><dt><kbd>M-. a </kbd><var>regexp</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-apropos </kbd><var>regexp</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dapropos-9"></a>Find definitions of all functions whose names match <var>regexp</var>.
 
-     <br><dt><kbd>M-. c </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-callers </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dcallers-9"></a>(Xref) Find calls to function <var>name</var>.
+     <br><dt><kbd>M-. c </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-callers </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dcallers-10"></a>(Xref) Find calls to function <var>name</var>.
 
-     <br><dt><kbd>M-. C </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-callees </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dcallees-10"></a>(Xref) Find the definitions of functions called by <var>name</var>.
+     <br><dt><kbd>M-. C </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-callees </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dcallees-11"></a>(Xref) Find the definitions of functions called by <var>name</var>.
 
-     <br><dt><kbd>M-. v </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-var-uses </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dvar_002duses-11"></a>(Xref) Find uses of the global variable <var>name</var>.
+     <br><dt><kbd>M-. v </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-var-uses </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dvar_002duses-12"></a>(Xref) Find uses of the global variable <var>name</var>.
 
-     <br><dt><kbd>M-. V </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-var-defs </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dvar_002ddefs-12"></a>(Xref) Find definitions of global variable <var>name</var>.  Since Perl's
+     <br><dt><kbd>M-. V </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dt><kbd>M-x sepia-var-defs </kbd><var>name</var><kbd> &lt;RET&gt;</kbd><dd><a name="index-sepia_002dvar_002ddefs-13"></a>(Xref) Find definitions of global variable <var>name</var>.  Since Perl's
 global variables are not declared, this is rarely useful
 
      <!-- XXX: broken, so don't mention it. -->
@@ -105,9 +105,9 @@ fit into either of the above categories.
 
 <!-- other commands -->
 <dl>
-<dt><kbd>M-. n</kbd><dt><kbd>M-x sepia-next</kbd><dd><a name="index-sepia_002dnext-13"></a>Cycle through the definitions found by the previous &lt;M-.&gt; search.
+<dt><kbd>M-. n</kbd><dt><kbd>M-x sepia-next</kbd><dd><a name="index-sepia_002dnext-14"></a>Cycle through the definitions found by the previous &lt;M-.&gt; search.
 
-     <br><dt><kbd>M-. r</kbd><dt><kbd>M-x sepia-rebuild</kbd><dd><a name="index-sepia_002drebuild-14"></a>Rebuild the cross-reference database by walking the op-tree and
+     <br><dt><kbd>M-. r</kbd><dt><kbd>M-x sepia-rebuild</kbd><dd><a name="index-sepia_002drebuild-15"></a>Rebuild the cross-reference database by walking the op-tree and
 stashes.
 
      <br><dt><kbd>M-. t</kbd><dt><kbd>M-x find-tag</kbd><dd>Execute the <code>find-tag</code> command typically bound to &lt;M-.&gt;.

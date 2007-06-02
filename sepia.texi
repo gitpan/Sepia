@@ -131,6 +131,7 @@ once you are accustomed to it, you may find it very effective.
 @c ============================================================
 @node Editing, Interactive Perl, Introduction, Top
 @chapter Editing
+@findex sepia-mode
 
 Sepia's first contribution is a set of commands to explore a Perl
 codebase.  These include commands to browse and display documentation,
@@ -376,8 +377,8 @@ REPL, Sepia provides a number of other ways to evaluate pieces of code
 in Perl, and commands to process buffer regions with Perl.
 
 @findex sepia-repl
-To start or switch to the repl, type @kbd{M-x sepia-repl}.  As
-sepia-mode, @key{TAB} in the REPL performs partial-word completion with
+To start or switch to the repl, type @kbd{M-x sepia-repl}.  As in Sepia
+mode, @key{TAB} in the REPL performs partial-word completion with
 @code{sepia-complete-symbol}.  However, it also supports filename
 completion like standard comint mode.
 
@@ -487,7 +488,8 @@ process has already been started by calling @code{sepia-repl}.
 @item C-M-x
 @itemx M-x sepia-eval-defun
 @findex sepia-eval-defun
-Evaluate the function around point in the inferior Perl process.
+Evaluate the function around point in the inferior Perl process.  If it
+contains errors, jump to the location of the first.
 
 @item C-c C-l
 @itemx M-x sepia-load-file
@@ -523,7 +525,7 @@ prefix argument, replace the region with the result.
 
 @item M-x sepia-perl-ne-region @key{RET} @var{code} @key{RET}
 @findex sepia-perl-ne-region
-Evaluate @var{code} as above, but collect the @emph{results} of code.
+Evaluate @var{code} as above, but collect the results instead.
 
 @item M-x sepia-perlize-region @key{RET} @var{code} @key{RET}
 @findex sepia-perlize-region
