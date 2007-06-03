@@ -33,17 +33,15 @@ Up:&nbsp;<a rel="up" accesskey="u" href="index.html#Top">Top</a>
 
 <h2 class="chapter">3 Interactive Perl</h2>
 
-<p>Sepia's second main contribution is an interactive interface (REPL) to
-an inferior Perl process in comint mode.  The interface is based on
-comint-mode, and inherits many of its bindings; this chapter discusses
-only the Sepia extensions.  In addition to the standard interactive
-REPL, Sepia provides a number of other ways to evaluate pieces of code
-in Perl, and commands to process buffer regions with Perl.
+<p><a name="index-sepia_002drepl-21"></a>Sepia's second main contribution is an interactive interface (REPL) to
+an inferior Perl process.  The interface is based on GUD mode, and
+inherits many of its bindings; this chapter discusses only the Sepia
+extensions.  To start or switch to the repl, type <kbd>M-x sepia-repl</kbd>. 
+As in Sepia mode, &lt;TAB&gt; in the REPL performs partial-word completion
+with <code>sepia-complete-symbol</code>.
 
-   <p><a name="index-sepia_002drepl-21"></a>To start or switch to the repl, type <kbd>M-x sepia-repl</kbd>.  As in Sepia
-mode, &lt;TAB&gt; in the REPL performs partial-word completion with
-<code>sepia-complete-symbol</code>.  However, it also supports filename
-completion like standard comint mode.
+   <p>Sepia also provides a number of other ways to evaluate pieces of code in
+Perl, and commands to process buffer text using the inferior process.
 
 <ul class="menu">
 <li><a accesskey="1" href="Shortcuts.html#Shortcuts">Shortcuts</a>

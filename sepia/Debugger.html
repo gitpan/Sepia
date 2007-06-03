@@ -34,31 +34,39 @@ Up:&nbsp;<a rel="up" accesskey="u" href="Interactive-Perl.html#Interactive-Perl"
 
 <h3 class="section">3.2 Debugger</h3>
 
-<p>Unfortunately Sepia does <em>not</em> use Perl's debugger hooks, so it
-does not support a true debugger with breakpoints, single-stepping, etc. 
-However, the REPL overrides the <code>die()</code> and <code>warn()</code>
-operators, allowing it to intercept failures while their context is
-still available.  This makes it possible to produce a backtrace, inspect
-and modify global variables, and continue execution.  If the PadWalker
-module is available, Sepia also provides functions to inspect and modify
-lexical variables.
+<p>Sepia uses Perl's debugger hooks and GUD mode to support conditional
+breakpoints and single-stepping, and overrides Perl's <code>die()</code> to
+invoke the debugger rather than unwinding the stack.  This makes it
+possible to produce a backtrace, inspect and modify global variables,
+and even continue execution when a program tries to kill itself.  If the
+PadWalker module is available, Sepia also provides functions to inspect
+and modify lexical variables.
 
    <p>The debugger has its own set of shortcuts, also prefixed by a comma.
 
      <dl>
-<dt><kbd>backtrace</kbd><dd>Show a backtrace with <code>Carp::cluck</code>.
+<dt><kbd>backtrace</kbd><dd>Show a backtrace.
 
-     <br><dt><kbd>inspect </kbd><var>n</var><dd>Inspect lexicals in frame <var>n</var>, counting upward (requires PadWalker).
+     <br><dt><kbd>break </kbd><var>file</var><kbd>:</kbd><var>line</var><kbd> [</kbd><var>expr</var><kbd>]</kbd><dd>Set a breakpoint in <var>file</var> at <var>line</var>.  If <var>expr</var> is
+supplied, stop only if it evaluates to true.
+
+     <br><dt><kbd>down </kbd><var>n</var><dt><kbd>up </kbd><var>n</var><dd>Move the current stack frame up or down by <var>n</var> (or one) frames.
 
      <br><dt><kbd>eval </kbd><var>n</var> <var>expr</var><dd>Evaluate <var>expr</var> in the lexical environment of frame <var>n</var>
 (requires PadWalker).  <var>expr</var> should not transfer control out of
 this environment, but is free to modify its lexicals.
 
-     <br><dt><kbd>return </kbd><var>expr</var><dd>Continue execution as if <code>die()</code> or <code>warn()</code> had returned the
-value of <var>expr</var>, which is evaluated in the global environment.
+     <br><dt><kbd>inspect </kbd><var>n</var><dd>Inspect lexicals in frame <var>n</var>, counting upward from 1.
 
-     <br><dt><kbd>die</kbd><dt><kbd>warn</kbd><dd>Continue dying or warning as the program would have done without
-debugger intervention.
+     <br><dt><kbd>next [</kbd><var>n</var><kbd>]</kbd><dd>Advance <var>n</var> (or one) lines, skipping subroutine calls.
+
+     <br><dt><kbd>quit</kbd><dt><kbd>die</kbd><dt><kbd>warn</kbd><dd>Continue as the program would have executed without debugger
+intervention, dying if the debugger was called from <code>die()</code>.
+
+     <br><dt><kbd>return </kbd><var>expr</var><dd>Continue execution as if <code>die()</code> had returned the value of
+<var>expr</var>, which is evaluated in the global environment.
+
+     <br><dt><kbd>step [</kbd><var>n</var><kbd>]</kbd><dd>Step forward <var>n</var> (or one) lines, descending into subroutines.
 
    </dl>
 

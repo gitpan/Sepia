@@ -35,13 +35,13 @@ Up:&nbsp;<a rel="up" accesskey="u" href="Interactive-Perl.html#Interactive-Perl"
 <h3 class="section">3.1 Shortcuts</h3>
 
 <p>&ldquo;Shortcuts&rdquo; are commands handled specially by the REPL rather than
-being evaluated as perl code.  They either communicate with the REPL
+being evaluated as Perl code.  They either communicate with the REPL
 function, or provide a convenient interface to variables in the Sepia
 package.  Shortcuts are prefixed by a comma (&lt;,&gt;), and may be
 abbreviated to the shortest unique prefix.
 
      <dl>
-<dt><kbd>cd </kbd><var>dir</var><dd>Change perl's current directory to <var>dir</var>.
+<dt><kbd>cd </kbd><var>dir</var><dd>Change Perl's current directory to <var>dir</var>.
 
      <br><dt><kbd>format </kbd><var>type</var><dd>Set the output format to <var>type</var>, either &ldquo;dumper&rdquo; (using
 <code>Data::Dumper</code>), &ldquo;dump&rdquo; (<code>Data::Dump</code>), &ldquo;yaml&rdquo;
@@ -58,6 +58,9 @@ abbreviated to the shortest unique prefix.
 
      <br><dt><kbd>reload</kbd><dd>Reload <samp><span class="file">Sepia.pm</span></samp> and recursively invoke the REPL.  This command is
 mostly of interest when working on Sepia itself.
+
+     <br><dt><kbd>shell [</kbd><var>command</var><kbd>]</kbd><dd>Execute shell command <var>command</var>, displaying its standard output and
+standard error.
 
      <br><dt><kbd>strict [</kbd><var>val</var><kbd>]</kbd><dd>Set evaluation strictness to <var>val</var>, or toggle it if <var>val</var> is not
 given.  Note that turning strictness off and on clears the REPL's

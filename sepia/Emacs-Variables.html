@@ -35,17 +35,17 @@ Up:&nbsp;<a rel="up" accesskey="u" href="Customization.html#Customization">Custo
 <h3 class="section">4.1 Emacs Variables</h3>
 
      <dl>
-<dt><kbd>sepia-complete-methods</kbd><dd>If non-<code>NIL</code>, <code>sepia-complete-symbol</code> will complete
+<dt><kbd>sepia-complete-methods</kbd><dd>If non-<code>nil</code>, <code>sepia-complete-symbol</code> will complete
 simple method calls of the form <code>$x-&gt;</code> or <code>Module-&gt;</code>.  Since
 the former requires evaluation of <code>$x</code>, this can be disabled. 
 Default: <code>T</code>.
 
-     <br><dt><kbd>sepia-eval-defun-include-decls</kbd><dd>If non-<code>NIL</code>, attempt to generate a declaration list for
+     <br><dt><kbd>sepia-eval-defun-include-decls</kbd><dd>If non-<code>nil</code>, attempt to generate a declaration list for
 <code>sepia-eval-defun</code>.  This is necessary when evaluating some code,
 such as that calling functions without parentheses, because the presence
 of declarations affects the parsing of barewords.  Default: <code>T</code>.
 
-     <br><dt><kbd>sepia-indent-expand-abbrev</kbd><dd>If non-<code>NIL</code>, <code>sepia-indent-or-complete</code> will, if
+     <br><dt><kbd>sepia-indent-expand-abbrev</kbd><dd>If non-<code>nil</code>, <code>sepia-indent-or-complete</code> will, if
 reindentation does not change the current line, expand an abbreviation
 before point rather than performing completion.  Only if no abbreviation
 is found will it perform completion.  Default: <code>T</code>.
@@ -59,14 +59,14 @@ is found will it perform completion.  Default: <code>T</code>.
 otherwise.
 
      <br><dt><kbd>sepia-perl5lib</kbd><dd>A list of directories to include in <code>PERL5LIB</code> when starting
-interactive Perl.  Default: <code>NIL</code>.
+interactive Perl.  Default: <code>nil</code>.
 
      <br><dt><kbd>sepia-prefix-key</kbd><dd>The prefix to use for for functions in <code>sepia-keymap</code>.  Default:
 &lt;M-.&gt;.
 
      <br><dt><kbd>sepia-program-name</kbd><dd>The Perl program name for interactive Perl.  Default: &ldquo;perl&rdquo;.
 
-     <br><dt><kbd>sepia-use-completion</kbd><dd>If non-<code>NIL</code>, various Sepia functions will generate completion
+     <br><dt><kbd>sepia-use-completion</kbd><dd>If non-<code>nil</code>, various Sepia functions will generate completion
 candidates from interactive Perl when called interactively.  This may be
 slow or undesirable in some situations.  Default: <code>T</code>.
 

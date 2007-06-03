@@ -19,26 +19,24 @@ For more information, please see F<sepia/index.html>.
 
 =cut
 
-$VERSION = '0.76_02';
+$VERSION = '0.90_01';
 @ISA = qw(Exporter);
 
 require Exporter;
 use strict;
+use B;
+use Sepia::Debug;               # THIS TURNS ON DEBUGGING INFORMATION!
 use Cwd 'abs_path';
 use Scalar::Util 'looks_like_number';
 use Module::Info;
 use Text::Abbrev;
-use Carp;
-use B;
 
-use vars qw($PS1 $dies $STOPDIE $STOPWARN %REPL %RK %REPL_DOC
-            $PACKAGE $WANTARRAY $PRINTER $STRICT $PRINT_PRETTY);
+use vars qw($PS1 %REPL %RK %REPL_DOC
+            $REPL_LEVEL $REPL_IN $REPL_OUT
+            $PACKAGE $WANTARRAY $PRINTER $STRICT $PRINT_PRETTY
+            $ISEVAL);
 
 BEGIN {
-    eval { require PadWalker; import PadWalker qw(peek_my) };
-    if ($@) {
-        *peek_my = sub { +{ } };
-    }
     eval { require Lexical::Persistence; import Lexical::Persistence };
     if ($@) {
         *repl_strict = sub {
@@ -502,7 +500,7 @@ sub tolisp($)
         } else {
             ## XXX Elisp and perl have slightly different
             ## escaping conventions, so we do this crap instead.
-            $thing =~ s/["\\]/\\\1/g;
+            $thing =~ s/["\\]/\\$1/g;
             qq{"$thing"};
         }
     } elsif ($t eq 'GLOB') {
@@ -522,9 +520,9 @@ sub tolisp($)
     }
 }
 
-=head2 C<printer(\@res [, $iseval])>
+=head2 C<printer(\@res, $wantarray)>
 
-Print C<@res> appropriately on the current filehandle.  If C<$iseval>
+Print C<@res> appropriately on the current filehandle.  If C<$ISEVAL>
 is true, use terse format.  Otherwise, use human-readable format,
 which can use either L<Data::Dumper>, L<YAML>, or L<Data::Dump>.
 
@@ -532,19 +530,21 @@ which can use either L<Data::Dumper>, L<YAML>, or L<Data::Dump>.
 
 sub print_dumper
 {
+    eval { require Data::Dumper };
     local $Data::Dumper::Deparse = 1;
     local $Data::Dumper::Indent = 0;
     local $_;
     no strict;
+    my $thing = @res > 1 ? \@res : $res[0];
     eval {
-        $_ = Data::Dumper::Dumper(@res > 1 ? \@res : $res[0]);
+        $_ = Data::Dumper::Dumper($thing);
         s/^\$VAR1 = //;
         s/;$//;
     };
     if (length $_ > ($ENV{COLUMNS} || 80)) {
         $Data::Dumper::Indent = 2;
         eval {
-            $_ = Data::Dumper::Dumper(@res > 1 ? \@res : $res[0]);
+            $_ = Data::Dumper::Dumper($thing);
             s/\A\$VAR1 = //;
             s/;\Z//;
         };
@@ -586,23 +586,23 @@ sub printer
 {
     no strict;
     local *res = shift;
-    my ($iseval, $wantarray) = @_;
+    my ($wantarray) = @_;
     @::__ = @res;
     $::__ = @res == 1 ? $res[0] : [@res];
     my $str;
-    if ($iseval) {
+    if ($ISEVAL) {
         $res = "@res";
     } elsif (@res == 1 && UNIVERSAL::can($res[0], '()')) {
         # overloaded?
         $res = $res[0];
-    } elsif (!$iseval && $PRINT_PRETTY && @res > 1 && !grep ref, @res) {
+    } elsif (!$ISEVAL && $PRINT_PRETTY && @res > 1 && !grep ref, @res) {
         $res = columnate(sort @res);
         print $res;
         return;
     } else {
         $res = $PRINTER->();
     }
-    if ($iseval) {
+    if ($ISEVAL) {
         print ';;;', length $res, "\n$res\n";
     } else {
         print "=> $res\n";
@@ -632,10 +632,6 @@ Behavior is controlled in part through the following package-globals:
 
 =item C<$PS1> -- the default prompt
 
-=item C<$STOPDIE> -- true to enter the inspector on C<die()>
-
-=item C<$STOPWARN> -- true to enter the inspector on C<warn()>
-
 =item C<$STRICT> -- whether 'use strict' is applied to input
 
 =item C<$WANTARRAY> -- evaluation context
@@ -656,9 +652,6 @@ displays arrays of scalars as columns.
 BEGIN {
     no strict;
     $PS1 = "> ";
-    $dies = 0;
-    $STOPDIE = 1;
-    $STOPWARN = 0;
     $PACKAGE = 'main';
     $WANTARRAY = 1;
     $PRINTER = \&Sepia::print_dumper;
@@ -673,6 +666,9 @@ BEGIN {
              strict => \&Sepia::repl_strict,
              quit => \&Sepia::repl_quit,
              reload => \&Sepia::repl_reload,
+             shell => \&Sepia::repl_shell,
+             debug => \&Sepia::Debug::repl_debug,
+             break => \&Sepia::Debug::repl_break,
          );
     %REPL_DOC = (
         cd =>
@@ -690,6 +686,8 @@ EOS
     'package PACKAGE    Set evaluation package to PACKAGE',
         quit =>
     'quit               Quit the REPL',
+        shell =>
+    'shell CMD ...      Run CMD in the shell.',
         strict =>
     'strict [0|1]       Turn \'use strict\' mode on or off',
         wantarray =>
@@ -713,42 +711,6 @@ sub Dump {
     eval {
         Data::Dumper->Dump([$_[0]], [$_[1]]);
     };
-}
-
-sub eval_in_env
-{
-    my ($expr, $env) = @_;
-    local $::ENV = $env;
-    my $str = '';
-    for (keys %$env) {
-        next unless /^([\$\@%])(.+)/;
-        $str .= "local *$2 = \$::ENV->{'$_'}; ";
-    }
-    eval "do { no strict; $str $expr }";
-}
-
-sub debug_upeval
-{
-    my ($lev, $exp) = $_[0] =~ /^\s*(\d+)\s+(.*)/;
-    print " <= $exp\n";
-    (0, eval_in_env($exp, peek_my(0+$lev)));
-}
-
-sub debug_inspect
-{
-    local $_ = shift;
-    for my $i (split) {
-        my $sub = (caller $i)[3];
-        next unless $sub;
-        my $h = peek_my($i);
-        print "[$i] $sub:\n";
-        no strict;
-        for (sort keys %$h) {
-            local @res = $h->{$_};
-            print "\t$_ = ", $PRINTER->(), "\n";
-        }
-    }
-    0;
 }
 
 sub repl_help
@@ -906,28 +868,11 @@ sub repl_reload
     }
 }
 
-sub debug_help
+sub repl_shell
 {
-    print <<EOS;
-Inspector commands (prefixed with ','):
-    ^C              Pop one debugger level
-    backtrace       show backtrace
-    inspect N ...   inspect lexicals in frame(s) N ...
-    eval N EXPR     evaluate EXPR in lexical environment of frame N
-    return EXPR     return EXPR
-    die/warn        keep on dying/warning
-EOS
-    0;
-}
-
-sub debug_backtrace
-{
-    Carp::cluck;0
-}
-
-sub debug_return
-{
-    (1, repl_eval(@_));
+    my $cmd = shift;
+    print `$cmd 2>& 1`;
+    return 0;
 }
 
 sub repl_eval
@@ -967,9 +912,8 @@ sub sig_warn
 
 sub print_warnings
 {
-    my $iseval = shift;
     if (@warn) {
-        if ($iseval) {
+        if ($ISEVAL) {
             my $tmp = "@warn";
             print ';;;'.length($tmp)."\n$tmp\n";
         } else {
@@ -983,8 +927,15 @@ sub print_warnings
 
 sub repl
 {
-    my ($fh, $level) = @_;
-    select((select($fh), $|=1)[0]);
+    if (@_ > 0) {
+        $REPL_IN = $_[0];
+        $REPL_OUT = $_[1];
+    }
+    select $REPL_OUT;
+    $| = 1;
+
+    local $REPL_LEVEL = $REPL_LEVEL + 1;
+
     my $in;
     my $buf = '';
     my $sigged = 0;
@@ -992,47 +943,10 @@ sub repl
     my $nextrepl = sub { $sigged = 1; };
 
     local *__;
-    my $MSG = "('\\C-c' to exit, ',h' for help)";
-    my %dhooks = (
-                backtrace => \&Sepia::debug_backtrace,
-                inspect => \&Sepia::debug_inspect,
-                eval => \&Sepia::debug_upeval,
-                return => \&Sepia::debug_return,
-                help => \&Sepia::debug_help,
-            );
-    local *CORE::GLOBAL::die = sub {
-        ## Protect us against people doing weird things.
-        if ($STOPDIE && !$SIG{__DIE__}) {
-            my @dieargs = @_;
-            local $dies = $dies+1;
-            local $PS1 = "*$dies*> ";
-            no strict;
-            local %Sepia::REPL = (
-                %dhooks, die => sub { local $Sepia::STOPDIE=0; die @dieargs });
-            local %Sepia::RK = abbrev keys %Sepia::REPL;
-            print "@_\n\tin ".caller()."\nDied $MSG\n";
-            return Sepia::repl($fh, 1);
-        }
-        CORE::die(Carp::shortmess @_);
-    };
+    local *CORE::GLOBAL::die = \&Sepia::Debug::die;
 
-    local *CORE::GLOBAL::warn = sub {
-        ## Again, this is above our pay grade:
-        if ($STOPWARN && $SIG{__WARN__} eq 'Sepia::sig_warn') {
-            my @dieargs = @_;
-            local $dies = $dies+1;
-            local $PS1 = "*$dies*> ";
-            no strict;
-            local %Sepia::REPL = (
-                %dhooks, warn => sub { local $Sepia::STOPWARN=0; warn @dieargs });
-            local %Sepia::RK = abbrev keys %Sepia::REPL;
-            print "@_\nWarned $MSG\n";
-            return Sepia::repl($fh, 1);
-        }
-        ## Avoid showing up in location information.
-        CORE::warn(Carp::shortmess @_);
-    };
-    print <<EOS if $dies == 0;
+    local *CORE::GLOBAL::warn = \&Sepia::Debug::warn;
+    print <<EOS if $REPL_LEVEL == 1;
 Sepia version $Sepia::VERSION.
 Press ",h" for help, or "^D" or ",q" to exit.
 EOS
@@ -1040,7 +954,7 @@ EOS
     my @sigs = qw(INT TERM PIPE ALRM);
     local @SIG{@sigs};
     $SIG{$_} = $nextrepl for @sigs;
- repl: while (my $in = <$fh>) {
+ repl: while (defined(my $in = <$REPL_IN>)) {
             if ($sigged) {
                 $buf = '';
                 $sigged = 0;
@@ -1049,13 +963,13 @@ EOS
             }
             $buf .= $in;
             $buf =~ s/^\s*//;
-            my $iseval;
+            local $ISEVAL;
             if ($buf =~ /^<<(\d+)\n(.*)/) {
-                $iseval = 1;
+                $ISEVAL = 1;
                 my $len = $1;
                 my $tmp;
                 $buf = $2;
-                while ($len && defined($tmp = read $fh, $buf, $len, length $buf)) {
+                while ($len && defined($tmp = read $REPL_IN, $buf, $len, length $buf)) {
                     $len -= $tmp;
                 }
             }
@@ -1093,11 +1007,11 @@ EOS
                 ## Ordinary eval
                 @res = repl_eval $buf, wantarray;
                 if ($@) {
-                    if ($iseval) {
+                    if ($ISEVAL) {
                         ## Always return results for an eval request
-                        Sepia::printer \@res, 1, wantarray;
-                        Sepia::printer [$@], 1, wantarray;
-                        # print_warnings $iseval;
+                        Sepia::printer \@res, wantarray;
+                        Sepia::printer [$@], wantarray;
+                        # print_warnings $ISEVAL;
                         $buf = '';
                         print prompt;
                     } elsif ($@ =~ /at EOF$/m) {
@@ -1121,10 +1035,10 @@ EOS
             if ($buf !~ /;$/ && $buf !~ /^,/) {
                 ## Be quiet if it ends with a semicolon, or if we
                 ## executed a shortcut.
-                Sepia::printer \@res, $iseval, wantarray;
+                Sepia::printer \@res, wantarray;
             }
             $buf = '';
-            print_warnings $iseval;
+            print_warnings;
             print prompt;
         }
 }
