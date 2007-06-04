@@ -1,3 +1,7 @@
+2007-06-04  Sean O'Rourke  <sorourke@cs.ucsd.edu>
+
+	* test.pl: disable Module::Info tests to avoid Module::Info bug.
+
 2007-06-02  Sean O'Rourke  <sorourke@cs.ucsd.edu>
 
 	* Major: replaced comint- with gud-based REPL, use real debugger.

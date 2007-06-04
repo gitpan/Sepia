@@ -19,7 +19,7 @@ For more information, please see F<sepia/index.html>.
 
 =cut
 
-$VERSION = '0.90_01';
+$VERSION = '0.90_02';
 @ISA = qw(Exporter);
 
 require Exporter;
