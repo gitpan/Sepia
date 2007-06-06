@@ -321,7 +321,7 @@ For modules within packages, see `sepia-module-list'."
     (gud-def gud-break ",break %f:%l" "\C-b" "Set breakpoint at current line.")
     (gud-def gud-step ",step %p" "\C-s" "Step one line.")
     (gud-def gud-next ",next %p" "\C-n" "Step one line, skipping calls.")
-    (gud-def gud-cont ",continue" "\C-c" "Continue.")
+    (gud-def gud-cont ",continue" "\C-r" "Continue.")
     (gud-def gud-print "%e" "\C-p" "Evaluate something.")
     (gud-def gud-remove ",delete %l %f" "\C-d" "Delete current breakpoint.")
     (run-hooks 'sepia-repl-mode-hook))
@@ -984,7 +984,7 @@ This function is intended to be bound to TAB."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; scratchpad code
 
-(defvar sepia-mode-map nil "Keymap for Sepia mode.")
+;; (defvar sepia-mode-map nil "Keymap for Sepia mode.")
 
 (defvar sepia-metapoint-map nil
   "Keymap for Sepia functions.  This is just an example of how you
@@ -1001,8 +1001,7 @@ might want to bind your keys, which works best when bound to
   (set (make-local-variable 'beginning-of-defun-function)
        'sepia-beginning-of-defun)
   (set (make-local-variable 'end-of-defun-function)
-       'sepia-end-of-defun)
-  (sepia-init))
+       'sepia-end-of-defun))
 
 (defun sepia-init ()
   "Perform the initialization necessary to start Sepia."

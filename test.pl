@@ -1,8 +1,4 @@
 #!/usr/bin/env perl
-BEGIN {
-    use FindBin '$Bin';
-    unshift @INC, "$Bin/blib/lib";
-}
 use Test::Simple tests => 18;
 
 require Data::Dumper;
