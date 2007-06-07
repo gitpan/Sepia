@@ -1,5 +1,17 @@
+2007-06-06  Sean O'Rourke  <sorourke@cs.ucsd.edu>
+
+	* t/50expect.t: REPL tests if you have Test::Expect.
+	* lib/Sepia/Debug.pm: use correct level when none given.
+	* lib/Sepia.pm: No longer bring in exporter (why did we?).
+	* sepia.el (sepia-init): always reinitialize sepia-mode-map.
+	* Makefile.PL: require 5.006 for warnings to quiet stupid "make
+	  test".
+
 2007-06-05  Sean O'Rourke  <sorourke@cs.ucsd.edu>
 
+	* Sepia.html: generate single-page manual instead of split.
+	* VERSION: 0.90
+	* sepia.el: docstring cleanup.
 	* lib/sepia/Debug.pm: misc usability improvements
 
 2007-06-04  Sean O'Rourke  <sorourke@cs.ucsd.edu>

@@ -19,10 +19,7 @@ For more information, please see F<sepia/index.html>.
 
 =cut
 
-$VERSION = '0.90';
-@ISA = qw(Exporter);
-
-require Exporter;
+$VERSION = '0.91';
 use strict;
 use B;
 use Sepia::Debug;               # THIS TURNS ON DEBUGGING INFORMATION!
@@ -137,6 +134,10 @@ BEGIN {
     %sigil = qw(ARRAY @ SCALAR $ HASH %);
 }
 
+## XXX: autovivification gives us problems here sometimes.  Specifically:
+##     defined *FOO{HASH} # => ''
+##     defined %FOO       # => ''
+##     defined *FOO{HASH} # => 1
 sub completions
 {
     no strict;
@@ -667,6 +668,7 @@ BEGIN {
              quit => \&Sepia::repl_quit,
              reload => \&Sepia::repl_reload,
              shell => \&Sepia::repl_shell,
+             eval => \&Sepia::repl_eval,
          );
     %REPL_DOC = (
         cd =>
@@ -813,7 +815,7 @@ sub repl_methods
     $x =~ s/^\s+//;
     $x =~ s/\s+$//;
     if ($x =~ /^\$/) {
-        $x = repl_eval("ref $x");
+        $x = $REPL{eval}->("ref $x");
         return 0 if $@;
     }
     $re ||= '.?';
@@ -874,9 +876,9 @@ sub repl_shell
 
 sub repl_eval
 {
-    my ($buf, $wantarray, $pkg) = @_;
+    my ($buf) = @_;
     no strict;
-    local $PACKAGE = $pkg || $PACKAGE;
+    # local $PACKAGE = $pkg || $PACKAGE;
     if ($STRICT) {
         if (!$WANTARRAY) {
             $buf = 'scalar($buf)';
@@ -885,7 +887,7 @@ sub repl_eval
         $ctx = $ctx ? "my ($ctx);" : '';
         $buf = eval "sub { package $PACKAGE; use strict; $ctx $buf }";
         if ($@) {
-            print STDERR "ERROR\n$@\n";
+            print "ERROR\n$@\n";
             return;
         }
         $STRICT->call($buf);
@@ -1002,7 +1004,7 @@ EOS
                 }
             } else {
                 ## Ordinary eval
-                @res = repl_eval $buf, wantarray;
+                @res = $REPL{eval}->($buf);
                 if ($@) {
                     if ($ISEVAL) {
                         ## Always return results for an eval request
@@ -1042,7 +1044,7 @@ EOS
 
 sub perl_eval
 {
-    tolisp(repl_eval(shift));
+    tolisp($REPL{eval}->(shift));
 }
 
 =head2 C<$status = html_module_list($file [, $prefix])>

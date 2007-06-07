@@ -201,7 +201,8 @@ each inferior Perl prompt."
     (define-key map "\C-c\C-r" 'sepia-repl)
     (define-key map "\C-c\C-s" 'sepia-scratch)
     (define-key map "\C-c!" 'sepia-set-cwd)
-    (define-key map (kbd "TAB") 'sepia-indent-or-complete)))
+    (define-key map (kbd "TAB") 'sepia-indent-or-complete)
+    map))
 
 ;;;###autoload
 (defun sepia-perldoc-this (name)
@@ -296,7 +297,9 @@ For modules within packages, see `sepia-module-list'."
   (pop-to-buffer (get-buffer "*sepia-repl*")))
 
 (define-derived-mode sepia-repl-mode gud-mode "Sepia REPL"
-  "Major mode for the Sepia REPL."
+  "Major mode for the Sepia REPL.
+
+\\{sepia-repl-mode-map}"
     (set (make-local-variable 'comint-dynamic-complete-functions)
          '(sepia-complete-symbol comint-dynamic-complete-filename))
     (set (make-local-variable 'comint-preoutput-filter-functions)
@@ -1027,7 +1030,7 @@ might want to bind your keys, which works best when bound to
       (define-key sepia-metapoint-map (car kv) (cdr kv)))
     (when (featurep 'ido)
       (define-key sepia-metapoint-map "j" 'sepia-jump-to-symbol)))
-  (unless sepia-mode-map
+  ;; (unless sepia-mode-map
     (setq sepia-mode-map (make-sparse-keymap))
     ;; Undo annoying binding of C-h, which breaks key help.  Move it
     ;; elsewhere?
@@ -1038,7 +1041,7 @@ might want to bind your keys, which works best when bound to
     ;; (define-key sepia-mode-map "\C-chm" 'sepia-perldoc-this)
     ;; (define-key sepia-mode-map "\C-chv" 'cperl-get-help)
 
-    (sepia-install-keys sepia-mode-map)
+    (setq sepia-mode-map (sepia-install-keys sepia-mode-map))
     ;; Load perl defs:
     ;; Create glue wrappers for Module::Info funcs.
     (dolist (x '((name "Find module name.\n\nDoes not require loading.")
@@ -1051,7 +1054,7 @@ Does not require loading.")
                  (packages-inside "List sub-packages in this module.\n\nRequires loading.")
                  (superclasses "List module's superclasses.\n\nRequires loading.")))
       (apply #'define-modinfo-function x))
-
+  (unless (fboundp 'xref-completions)
     ;; Create low-level wrappers for Sepia
     (dolist (x '((completions "Find completions in the symbol table.")
                  (method-completions "Complete on an object's methods.")
@@ -1081,10 +1084,10 @@ Does not require loading.")
                  (mod-redefined "Rebuild Xref information for a given package.")
                  (guess-module-file "Guess file corresponding to module.")
                  (file-modules "List the modules defined in a file.")))
-      (apply #'define-xref-function "Sepia::Xref" x))
+      (apply #'define-xref-function "Sepia::Xref" x)))
 
     ;; Initialize built hash
-    (sepia-init-perl-builtins)))
+    (sepia-init-perl-builtins))
 
 ;;;###autoload
 (define-derived-mode sepia-scratchpad-mode sepia-mode "Sepia-Scratch"
