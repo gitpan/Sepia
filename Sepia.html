@@ -365,11 +365,8 @@ supplied, stop only if it evaluates to true.
 
      <br><dt><kbd>down </kbd><var>n</var><dt><kbd>up </kbd><var>n</var><dd>Move the current stack frame up or down by <var>n</var> (or one) frames.
 
-     <br><dt><kbd>eval </kbd><var>n</var> <var>expr</var><dd>Evaluate <var>expr</var> in the lexical environment of frame <var>n</var>
-(requires PadWalker).  <var>expr</var> should not transfer control out of
-this environment, but is free to modify its lexicals.
-
-     <br><dt><kbd>inspect </kbd><var>n</var><dd>Inspect lexicals in frame <var>n</var>, counting upward from 1.
+     <br><dt><kbd>inspect [</kbd><var>n</var><kbd>]</kbd><dd>Inspect lexicals in the current frame or frame <var>n</var>, counting upward
+from 1.
 
      <br><dt><kbd>lsbreak</kbd><dd>List breakpoints.
 

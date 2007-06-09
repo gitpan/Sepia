@@ -189,10 +189,35 @@ each inferior Perl prompt."
      "")
     (t (setq sepia-passive-output "") string)))
 
-(defun sepia-install-keys (&optional map)
-  "Install Sepia bindings in the current local keymap."
-  (interactive)
-  (let ((map (or map (current-local-map))))
+
+(defvar sepia-metapoint-map
+  (let ((map (make-sparse-keymap)))
+    (when (featurep 'ido)
+      (define-key map "j" 'sepia-jump-to-symbol))
+    (dolist (kv '(("c" . sepia-callers)
+                  ("C" . sepia-callees)
+                  ("a" . sepia-apropos)
+                  ("A" . sepia-var-apropos)
+                  ("v" . sepia-var-uses)
+                  ("V" . sepia-var-defs)
+                  ;;		  ("V" . sepia-var-assigns)
+                  ("\M-." . sepia-dwim)
+                  ;; ("\M-." . sepia-location)
+                  ("l" . sepia-location)
+                  ("f" . sepia-defs)
+                  ("r" . sepia-rebuild)
+                  ("m" . sepia-module-find)
+                  ("n" . sepia-next)
+                  ("t" . find-tag)
+                  ("d" . sepia-perldoc-this)))
+      (define-key map (car kv) (cdr kv)))
+    map)
+  "Keymap for Sepia functions.  This is just an example of how you
+might want to bind your keys, which works best when bound to
+`\\M-.'.")
+
+(defvar sepia-shared-map
+  (let ((map (make-sparse-keymap)))
     (define-key map sepia-prefix-key sepia-metapoint-map)
     (define-key map "\M-," 'sepia-next)
     (define-key map "\C-\M-x" 'sepia-eval-defun)
@@ -202,7 +227,8 @@ each inferior Perl prompt."
     (define-key map "\C-c\C-s" 'sepia-scratch)
     (define-key map "\C-c!" 'sepia-set-cwd)
     (define-key map (kbd "TAB") 'sepia-indent-or-complete)
-    map))
+    map)
+  "Sepia bindings common to all modes.")
 
 ;;;###autoload
 (defun sepia-perldoc-this (name)
@@ -296,6 +322,15 @@ For modules within packages, see `sepia-module-list'."
     )
   (pop-to-buffer (get-buffer "*sepia-repl*")))
 
+(defvar sepia-repl-mode-map
+  (let ((map (copy-keymap sepia-shared-map)))
+    (set-keymap-parent map gud-mode-map)
+    (define-key map (kbd "<tab>") 'comint-dynamic-complete)
+    (define-key map "\C-a" 'comint-bol)
+    map)
+
+"Keymap for Sepia interactive mode.")
+    
 (define-derived-mode sepia-repl-mode gud-mode "Sepia REPL"
   "Major mode for the Sepia REPL.
 
@@ -307,11 +342,6 @@ For modules within packages, see `sepia-module-list'."
     ;; (set (make-local-variable 'comint-use-prompt-regexp) t)
     (modify-syntax-entry ?: "_")
     (modify-syntax-entry ?> ".")
-    ;; (use-local-map (copy-keymap (current-local-map)))
-    (sepia-install-keys sepia-repl-mode-map)
-    (define-key sepia-repl-mode-map
-        (kbd "<tab>") 'comint-dynamic-complete)
-    (define-key sepia-repl-mode-map "\C-a" 'comint-bol)
     (set (make-local-variable 'comint-prompt-regexp) "^[^>\n]*> *")
     (set (make-local-variable 'gud-target-name) "sepia")
     (set (make-local-variable 'gud-marker-filter) 'sepia-gud-marker-filter)
@@ -987,12 +1017,12 @@ This function is intended to be bound to TAB."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; scratchpad code
 
-;; (defvar sepia-mode-map nil "Keymap for Sepia mode.")
-
-(defvar sepia-metapoint-map nil
-  "Keymap for Sepia functions.  This is just an example of how you
-might want to bind your keys, which works best when bound to
-`\\M-.'.")
+(defvar sepia-mode-map
+  (let ((map (copy-keymap sepia-shared-map)))
+    (set-keymap-parent map cperl-mode-map)
+    (define-key map "\C-c\C-h" nil)
+    map)
+ "Keymap for Sepia mode.")
 
 ;;;###autoload
 (define-derived-mode sepia-mode cperl-mode "Sepia"
@@ -1008,42 +1038,9 @@ might want to bind your keys, which works best when bound to
 
 (defun sepia-init ()
   "Perform the initialization necessary to start Sepia."
-  (unless sepia-metapoint-map
-    ;; first time!
-    (setq sepia-metapoint-map (make-sparse-keymap))
-    (dolist (kv '(("c" . sepia-callers)
-                  ("C" . sepia-callees)
-                  ("a" . sepia-apropos)
-                  ("A" . sepia-var-apropos)
-                  ("v" . sepia-var-uses)
-                  ("V" . sepia-var-defs)
-                  ;;		  ("V" . sepia-var-assigns)
-                  ("\M-." . sepia-dwim)
-                  ;; ("\M-." . sepia-location)
-                  ("l" . sepia-location)
-                  ("f" . sepia-defs)
-                  ("r" . sepia-rebuild)
-                  ("m" . sepia-module-find)
-                  ("n" . sepia-next)
-                  ("t" . find-tag)
-                  ("d" . sepia-perldoc-this)))
-      (define-key sepia-metapoint-map (car kv) (cdr kv)))
-    (when (featurep 'ido)
-      (define-key sepia-metapoint-map "j" 'sepia-jump-to-symbol)))
-  ;; (unless sepia-mode-map
-    (setq sepia-mode-map (make-sparse-keymap))
-    ;; Undo annoying binding of C-h, which breaks key help.  Move it
-    ;; elsewhere?
-    (define-key sepia-mode-map "\C-c\C-h" nil)
-    ;; (define-key sepia-mode-map "\C-chF" 'cperl-info-on-command)
-    ;; (define-key sepia-mode-map "\C-cha" 'cperl-toggle-autohelp)
-    ;; (define-key sepia-mode-map "\C-chf" 'cperl-info-on-current-command)
-    ;; (define-key sepia-mode-map "\C-chm" 'sepia-perldoc-this)
-    ;; (define-key sepia-mode-map "\C-chv" 'cperl-get-help)
-
-    (setq sepia-mode-map (sepia-install-keys sepia-mode-map))
     ;; Load perl defs:
-    ;; Create glue wrappers for Module::Info funcs.
+  ;; Create glue wrappers for Module::Info funcs.
+  (unless (fboundp 'xref-completions)
     (dolist (x '((name "Find module name.\n\nDoes not require loading.")
                  (version "Find module version.\n\nDoes not require loading.")
                  (inc-dir "Find directory in which this module was found.\n\nDoes not require loading.")
@@ -1054,7 +1051,6 @@ Does not require loading.")
                  (packages-inside "List sub-packages in this module.\n\nRequires loading.")
                  (superclasses "List module's superclasses.\n\nRequires loading.")))
       (apply #'define-modinfo-function x))
-  (unless (fboundp 'xref-completions)
     ;; Create low-level wrappers for Sepia
     (dolist (x '((completions "Find completions in the symbol table.")
                  (method-completions "Complete on an object's methods.")
@@ -1084,15 +1080,20 @@ Does not require loading.")
                  (mod-redefined "Rebuild Xref information for a given package.")
                  (guess-module-file "Guess file corresponding to module.")
                  (file-modules "List the modules defined in a file.")))
-      (apply #'define-xref-function "Sepia::Xref" x)))
-
+      (apply #'define-xref-function "Sepia::Xref" x))
     ;; Initialize built hash
-    (sepia-init-perl-builtins))
+    (sepia-init-perl-builtins)))
+
+(defvar sepia-scratchpad-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map sepia-mode-map)
+    (define-key map "\C-j" 'sepia-scratch-send-line)
+    map))
 
 ;;;###autoload
 (define-derived-mode sepia-scratchpad-mode sepia-mode "Sepia-Scratch"
   "Major mode for the Perl scratchpad, derived from Sepia mode."
-  (define-key sepia-scratchpad-mode-map "\C-j" 'sepia-scratch-send-line))
+  (sepia-init))
 
 ;;;###autoload
 (defun sepia-scratch ()

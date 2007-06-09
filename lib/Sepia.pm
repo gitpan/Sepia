@@ -19,7 +19,7 @@ For more information, please see F<sepia/index.html>.
 
 =cut
 
-$VERSION = '0.91';
+$VERSION = '0.92';
 use strict;
 use B;
 use Sepia::Debug;               # THIS TURNS ON DEBUGGING INFORMATION!
@@ -716,8 +716,8 @@ sub repl_help
 {
     print "REPL commands (prefixed with ','):\n";
     for (sort keys %REPL) {
-        print "    ",
-            exists $REPL_DOC{$_} ? "$REPL_DOC{$_}\n": "$_    (undocumented)\n";
+        print "    ", exists $REPL_DOC{$_} ? "$REPL_DOC{$_}\n":
+            sprintf("%-18s (undocumented)\n", $_);
     }
     0;
 }

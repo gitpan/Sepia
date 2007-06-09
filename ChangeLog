@@ -1,5 +1,11 @@
+2007-06-09  Sean O'Rourke  <sorourke@cs.ucsd.edu>
+
+	* VERSION: 0.92
+	* sepia.el (sepia-shared-map, etc.): fix keymap initialization.
+
 2007-06-06  Sean O'Rourke  <sorourke@cs.ucsd.edu>
 
+	* lib/Sepia/Debug.pm: eval in lexical env when in debugger.
 	* t/50expect.t: REPL tests if you have Test::Expect.
 	* lib/Sepia/Debug.pm: use correct level when none given.
 	* lib/Sepia.pm: No longer bring in exporter (why did we?).

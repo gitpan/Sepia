@@ -131,9 +131,8 @@ sub repl_upeval
     # my ($lev, $exp) = $_[0] =~ /^\s*(\d+)\s+(.*)/;
     # print " <= $exp\n";
     # (0, eval_in_env2($exp, $level));
-    print "=> ", eval_in_env($exp, peek_my(4+$level)), "\n";
     # (0, eval_in_env3($exp, peek_my(4 + $level)));
-    0;
+    eval_in_env($exp, peek_my(4+$level));
 }
 
 # inspect lexicals at level N, or current level
@@ -189,7 +188,7 @@ sub breakpoint
     my $h = breakpoint_file $file;
     if (defined $h) {
         $h->{$line} = $cond || 1;
-        return "$file\:$line $h->{$line}";
+        return $cond ? "$file\:$line if $cond" : "$file\:$line";
     }
     return undef;
 }
@@ -301,7 +300,7 @@ my %REPL = (
     # },
     backtrace => \&repl_backtrace,
     inspect => \&repl_inspect,
-    eval => \&repl_upeval,
+    # eval => \&repl_upeval,
     return => \&repl_return,
     lsbreak => \&repl_lsbreak,
     eval => \&repl_upeval,      # DANGER!

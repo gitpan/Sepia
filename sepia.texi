@@ -474,13 +474,9 @@ supplied, stop only if it evaluates to true.
 @itemx up @var{n}
 Move the current stack frame up or down by @var{n} (or one) frames.
 
-@item eval @var{n} @var{expr}
-Evaluate @var{expr} in the lexical environment of frame @var{n}
-(requires PadWalker).  @var{expr} should not transfer control out of
-this environment, but is free to modify its lexicals.
-
-@item inspect @var{n}
-Inspect lexicals in frame @var{n}, counting upward from 1.
+@item inspect [@var{n}]
+Inspect lexicals in the current frame or frame @var{n}, counting upward
+from 1.
 
 @item lsbreak
 List breakpoints.
