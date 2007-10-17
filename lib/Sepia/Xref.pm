@@ -674,10 +674,13 @@ List the modules defined in file C<$file>.
 
 sub file_modules {
     my $file = shift;
-    eval "use Module::Include;" and do {
-        my $mod = Module::Include->new_from_file(abs_path($file));
-        return ($mod && $mod->packages_inside) || undef;
-    };
+    eval {
+        require Module::Info;
+        my $mod = Module::Info->new_from_file(abs_path($file));
+        if ( $mod ) {
+            return $mod->packages_inside();
+        }
+    }
 }
 
 =item C<var_apropos($expr)>
