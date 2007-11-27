@@ -311,7 +311,7 @@ For modules within packages, see `sepia-module-list'."
                         (cdr stuff)
                         (mapcar (lambda (x) (concat "-I" x)) sepia-perl5lib)
                         '("-MSepia" "-MSepia::Xref"
-                          "-e" "Sepia::repl(*STDIN, *STDOUT)")))))
+                          "-e" "Sepia::repl")))))
     (setq sepia-process (get-buffer-process "*sepia-repl*"))
     (accept-process-output sepia-process 0 1)
     ;; Steal a bit from gud-common-init:

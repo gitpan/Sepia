@@ -21,15 +21,39 @@
 </head>
 <body>
 <h1 class="settitle">SEPIA: Simple Emacs Perl Integration</h1>
+<div class="node">
+<p><hr>
 <a name="Top"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Introduction">Introduction</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#dir">(dir)</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#dir">(dir)</a>
+
+</div>
 
    <div class="block-image"><img src="Sepia.jpg" alt="Sepia.jpg"></div>
 
    <p>Sepia is a set of Perl development tools for Emacs supporting code
 navigation and interactive evaluation.
 
+<ul class="menu">
+<li><a accesskey="1" href="#Introduction">Introduction</a>
+<li><a accesskey="2" href="#Editing">Editing</a>
+<li><a accesskey="3" href="#Interactive-Perl">Interactive Perl</a>
+<li><a accesskey="4" href="#Customization">Customization</a>
+<li><a accesskey="5" href="#Internals">Internals</a>
+<li><a accesskey="6" href="#Credits">Credits</a>
+<li><a accesskey="7" href="#Function-Index">Function Index</a>
+</ul>
+
 <!-- ============================================================ -->
-<p><a name="Introduction"></a>
+<div class="node">
+<p><hr>
+<a name="Introduction"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Editing">Editing</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Top">Top</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
 
 <h2 class="chapter">1 Introduction</h2>
 
@@ -38,7 +62,19 @@ extend CPerl mode to support fast code navigation and interactive
 development.  It is inspired by Emacs' current support for a number of
 other languages, including Lisp, Python, and Emacs Lisp.
 
-<p><a name="Getting-Started"></a>
+<ul class="menu">
+<li><a accesskey="1" href="#Getting-Started">Getting Started</a>
+<li><a accesskey="2" href="#Philosophy">Philosophy</a>
+</ul>
+
+<div class="node">
+<p><hr>
+<a name="Getting-Started"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Philosophy">Philosophy</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Introduction">Introduction</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Introduction">Introduction</a>
+
+</div>
 
 <h3 class="section">1.1 Getting Started</h3>
 
@@ -55,7 +91,13 @@ other languages, including Lisp, Python, and Emacs Lisp.
 </pre>
    <p>Then to bring up the interactive Perl prompt, type <kbd>M-x sepia-repl</kbd>.
 
-<p><a name="Philosophy"></a>
+<div class="node">
+<p><hr>
+<a name="Philosophy"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Getting-Started">Getting Started</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Introduction">Introduction</a>
+
+</div>
 
 <h3 class="section">1.2 Philosophy</h3>
 
@@ -108,7 +150,14 @@ for someone used Perl's typical mix of one-liners and edit-save-run, but
 once you are accustomed to it, you may find it very effective.
 
 <!-- ============================================================ -->
-<p><a name="Editing"></a>
+<div class="node">
+<p><hr>
+<a name="Editing"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Interactive-Perl">Interactive Perl</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Introduction">Introduction</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
 
 <h2 class="chapter">2 Editing</h2>
 
@@ -119,7 +168,20 @@ to find function definitions, and to query a cross-reference database of
 function and variable uses.  Sepia also provides intelligent symbol
 completion.
 
-<p><a name="Completion"></a>
+<ul class="menu">
+<li><a accesskey="1" href="#Completion">Completion</a>
+<li><a accesskey="2" href="#Navigation">Navigation</a>
+<li><a accesskey="3" href="#Documentation">Documentation</a>
+</ul>
+
+<div class="node">
+<p><hr>
+<a name="Completion"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Navigation">Navigation</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Editing">Editing</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Editing">Editing</a>
+
+</div>
 
 <h3 class="section">2.1 Completion</h3>
 
@@ -165,7 +227,14 @@ expanded, then call <code>sepia-complete-symbol</code>.
 
    </dl>
 
-<p><a name="Navigation"></a>
+<div class="node">
+<p><hr>
+<a name="Navigation"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Documentation">Documentation</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Completion">Completion</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Editing">Editing</a>
+
+</div>
 
 <h3 class="section">2.2 Navigation</h3>
 
@@ -248,7 +317,13 @@ stashes.
 
    </dl>
 
-<p><a name="Documentation"></a>
+<div class="node">
+<p><hr>
+<a name="Documentation"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Navigation">Navigation</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Editing">Editing</a>
+
+</div>
 
 <h3 class="section">2.3 Documentation</h3>
 
@@ -285,7 +360,14 @@ This is intended to give the programmer a sense of when he is creating
 external dependencies.
 
 <!-- ============================================================ -->
-<p><a name="Interactive-Perl"></a>
+<div class="node">
+<p><hr>
+<a name="Interactive-Perl"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Customization">Customization</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Editing">Editing</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
 
 <h2 class="chapter">3 Interactive Perl</h2>
 
@@ -299,7 +381,22 @@ with <code>sepia-complete-symbol</code>.
    <p>Sepia also provides a number of other ways to evaluate pieces of code in
 Perl, and commands to process buffer text using the inferior process.
 
-<p><a name="Shortcuts"></a>
+<ul class="menu">
+<li><a accesskey="1" href="#Shortcuts">Shortcuts</a>
+<li><a accesskey="2" href="#Debugger">Debugger</a>
+<li><a accesskey="3" href="#Evaluation">Evaluation</a>
+<li><a accesskey="4" href="#Mutilation">Mutilation</a>
+<li><a accesskey="5" href="#Scratchpad">Scratchpad</a>
+</ul>
+
+<div class="node">
+<p><hr>
+<a name="Shortcuts"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Debugger">Debugger</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Interactive-Perl">Interactive Perl</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Interactive-Perl">Interactive Perl</a>
+
+</div>
 
 <h3 class="section">3.1 Shortcuts</h3>
 
@@ -312,16 +409,28 @@ abbreviated to the shortest unique prefix.
      <dl>
 <dt><kbd>cd </kbd><var>dir</var><dd>Change Perl's current directory to <var>dir</var>.
 
+     <br><dt><kbd>debug [</kbd><var>val</var><kbd>]</kbd><dd>Turn Sepia debugger hook on or off, or toggle if <var>val</var> is missing.
+
+     <br><dt><kbd>define </kbd><var>name</var><kbd> ['</kbd><var>doc</var><kbd>'] </kbd><var>body...</var><dd>Define <var>name</var> as a shortcut for Perl code <var>body</var>, with optional
+documentation <var>doc</var>, surrounded by single quotes.  <var>body</var> is
+passed the raw command-line text as its first argument.
+
+     <br><dt><kbd>delete</kbd><dd>Delete the current breakpoint.
+
      <br><dt><kbd>format </kbd><var>type</var><dd>Set the output format to <var>type</var>, either &ldquo;dumper&rdquo; (using
 <code>Data::Dumper</code>), &ldquo;dump&rdquo; (<code>Data::Dump</code>), &ldquo;yaml&rdquo;
 (<code>YAML</code>), or &ldquo;plain&rdquo; (stringification).  Default: &ldquo;dumper&rdquo;.
 
      <br><dt><kbd>help</kbd><dd>Display a list of shortcuts.
 
+     <br><dt><kbd>lsbreak</kbd><dd>List breakpoints.
+
      <br><dt><kbd>methods </kbd><var>name</var><kbd> [</kbd><var>regexp</var><kbd>]</kbd><dd>Display a list of functions defined in package <var>name</var> and its
 <code>ISA</code>-ancestors matching optional pattern <var>regexp</var>.
 
      <br><dt><kbd>package </kbd><var>name</var><dd>Set the default evaluation package to <var>name</var>.
+
+     <br><dt><kbd>pwd</kbd><dd>Show the process's current working directory.
 
      <br><dt><kbd>quit</kbd><dd>Exit the inferior Perl process.
 
@@ -335,21 +444,31 @@ standard error.
 given.  Note that turning strictness off and on clears the REPL's
 lexical environment.
 
+     <br><dt><kbd>undef </kbd><var>name</var><dd>Undefine shortcut <var>name</var>.  <strong>Warning</strong>: this can equally be
+used to remove built-in shortcuts.
+
      <br><dt><kbd>wantarray [</kbd><var>val</var><kbd>]</kbd><dd>Set the evaluation context to <var>val</var>, or toggle between scalar and
 array context.
 
-     <br><dt><kbd>who [</kbd><var>name</var><kbd> [</kbd><var>regexp</var><kbd>]]</kbd><dd>List identifiers in package <var>name</var> (main by default) matching
-optional pattern <var>regexp</var>.
+     <br><dt><kbd>who </kbd><var>package</var><kbd> [</kbd><var>regexp</var><kbd>]</kbd><dt><kbd>who [</kbd><var>regexp</var><kbd>]</kbd><dd>List identifiers in <var>package</var> (main by default) matching
+optional <var>regexp</var>.
 
    </dl>
 
-<p><a name="Debugger"></a>
+<div class="node">
+<p><hr>
+<a name="Debugger"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Evaluation">Evaluation</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Shortcuts">Shortcuts</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Interactive-Perl">Interactive Perl</a>
+
+</div>
 
 <h3 class="section">3.2 Debugger</h3>
 
 <p>Sepia uses Perl's debugger hooks and GUD mode to support conditional
 breakpoints and single-stepping, and overrides Perl's <code>die()</code> to
-invoke the debugger rather than unwinding the stack.  This makes it
+invoke the debugger rather than unwind the stack.  This makes it
 possible to produce a backtrace, inspect and modify global variables,
 and even continue execution when a program tries to kill itself.  If the
 PadWalker module is available, Sepia also provides functions to inspect
@@ -382,7 +501,14 @@ intervention, dying if the debugger was called from <code>die()</code>.
 
    </dl>
 
-<p><a name="Evaluation"></a>
+<div class="node">
+<p><hr>
+<a name="Evaluation"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Mutilation">Mutilation</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Debugger">Debugger</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Interactive-Perl">Interactive Perl</a>
+
+</div>
 
 <h3 class="section">3.3 Evaluation</h3>
 
@@ -405,7 +531,14 @@ prefix argument, evaluate in list context.
 
    </dl>
 
-<p><a name="Mutilation"></a>
+<div class="node">
+<p><hr>
+<a name="Mutilation"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Scratchpad">Scratchpad</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Evaluation">Evaluation</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Interactive-Perl">Interactive Perl</a>
+
+</div>
 
 <h3 class="section">3.4 Mutilation</h3>
 
@@ -427,7 +560,13 @@ replace the region.
 
    </dl>
 
-<p><a name="Scratchpad"></a>
+<div class="node">
+<p><hr>
+<a name="Scratchpad"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Mutilation">Mutilation</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Interactive-Perl">Interactive Perl</a>
+
+</div>
 
 <h3 class="section">3.5 Scratchpad</h3>
 
@@ -438,20 +577,42 @@ like Sepia mode, except &lt;C-j&gt; evaluates the current line and prints
 the result on the next line.
 
 <!-- ============================================================ -->
-<p><a name="Customization"></a>
+<div class="node">
+<p><hr>
+<a name="Customization"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Internals">Internals</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Interactive-Perl">Interactive Perl</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
 
 <h2 class="chapter">4 Customization</h2>
 
 <p>While Sepia can be customized in both the Perl and Emacs Lisp, most of
-the user-accessible configuration is in the latter.  The two variables
-most likely to need customization are <kbd>sepia-program-name</kbd> and
-<kbd>sepia-perl5lib</kbd>.  Since Sepia tries where possible to reuse
-existing Emacs functionality, its behavior should already be covered by
-existing customizations.
+the user-accessible configuration is in the latter.
 
-<p><a name="Emacs-Variables"></a>
+<ul class="menu">
+<li><a accesskey="1" href="#Emacs-Variables">Emacs Variables</a>
+<li><a accesskey="2" href="#Perl-Variables">Perl Variables</a>
+</ul>
+
+<div class="node">
+<p><hr>
+<a name="Emacs-Variables"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Perl-Variables">Perl Variables</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Customization">Customization</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Customization">Customization</a>
+
+</div>
 
 <h3 class="section">4.1 Emacs Variables</h3>
+
+<p>Since Sepia tries where possible to reuse existing Emacs functionality,
+its behavior should already be covered by existing customizations.  The
+two variables most likely to need customization are
+<kbd>sepia-program-name</kbd> and <kbd>sepia-perl5lib</kbd>.  General Sepia mode
+configuration can be done with <kbd>sepia-mode-hook</kbd>, while
+REPL-specific configuration can be done with <kbd>sepia-repl-mode-hook</kbd>.
 
      <dl>
 <dt><kbd>sepia-complete-methods</kbd><dd>If non-<code>nil</code>, <code>sepia-complete-symbol</code> will complete
@@ -493,13 +654,20 @@ slow or undesirable in some situations.  Default: <code>T</code>.
 Default: <code>sepia-w3m-view-pod</code> if Emacs-w3m is available, or
 <code>sepia-perldoc-buffer</code> otherwise.
 
-</dl>
+   </dl>
 
-<p><a name="Perl-Variables"></a>
+<div class="node">
+<p><hr>
+<a name="Perl-Variables"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Emacs-Variables">Emacs Variables</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Customization">Customization</a>
+
+</div>
 
 <h3 class="section">4.2 Perl Variables</h3>
 
-<p>The following variables in the Sepia package control various aspects of
+<p>When Sepia starts up, it evaluates the Perl script in <samp><span class="file">~/.sepiarc</span></samp>. 
+The following variables in the Sepia package control various aspects of
 interactive evaluation.
 
      <dl>
@@ -526,8 +694,24 @@ Sepia debugger.  Default: false.
 
    </dl>
 
+   <p>Additional REPL shortcuts can be defined with
+<kbd>Sepia::define_shortcut</kbd>.  For example
+
+<pre class="example">     Sepia::define_shortcut time =&gt; sub { print scalar localtime, "\n"; 0 },
+         'Display the current time.';
+</pre>
+   <p>defines a shortcut &ldquo;time&rdquo; that displays the current time.  For
+details, see the code in <samp><span class="file">Sepia.pm</span></samp>.
+
 <!-- ============================================================ -->
-<p><a name="Internals"></a>
+<div class="node">
+<p><hr>
+<a name="Internals"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Credits">Credits</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Customization">Customization</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
 
 <h2 class="chapter">5 Internals</h2>
 
@@ -536,18 +720,35 @@ details mentioned above should probably be given less prominence.  For
 developer documentation, please see the POD for <code>Sepia</code> and
 <code>Sepia::Xref</code>, and the doc-strings in <samp><span class="file">sepia.el</span></samp>.
 
-<p><a name="Credits"></a>
+<div class="node">
+<p><hr>
+<a name="Credits"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Function-Index">Function Index</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Internals">Internals</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
 
 <h2 class="unnumbered">Credits</h2>
 
-<p>I would like to thank Hilko Bengen for finding and motivating me to fix
-a bunch of bugs, and for doing the Debian packaging.
+     <dl>
+<dt>Hilko Bengen<dd>Found and motivated me to fix a bunch of bugs, created Debian packages.
 
-   <p>I would also like to thank the authors of Emacs-w3m, SLIME, ido, and
-B::Xref for the code I stole.
+     <br><dt>Ye Wenbin<dd>Found and fixed numerous bugs.
+
+     <br><dt>Free Software<dd>Portions of the code were lifted from Emacs-w3m, SLIME, ido, and
+B::Xref, all of which are Free software.
+
+</dl>
 
 <!-- ============================================================ -->
-<p><a name="Function-Index"></a>
+<div class="node">
+<p><hr>
+<a name="Function-Index"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Credits">Credits</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
 
 <h2 class="unnumbered">Function Index</h2>
 
