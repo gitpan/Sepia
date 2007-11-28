@@ -25,6 +25,7 @@ sub test_for
     eval "require $mod";
     if ($@) {
         if (-t STDIN) {
+            $| = 1;
             print "@_.  Install [yN]? ";
             my ($rfd, $wfd, $efd) = ('', '', '');
             vec($rfd, fileno(STDIN), 1) = 1;
