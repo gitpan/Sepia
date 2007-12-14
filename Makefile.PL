@@ -26,7 +26,7 @@ sub test_for
     if ($@) {
         if (-t STDIN) {
             $| = 1;
-            print "@_.  Install [yN]? ";
+            print "@_.  Install $mod [yN]? ";
             my ($rfd, $wfd, $efd) = ('', '', '');
             vec($rfd, fileno(STDIN), 1) = 1;
             if (select $rfd, $wfd, $efd, 60.0) {
@@ -39,11 +39,11 @@ sub test_for
     }
 }
 
-test_for 'PadWalker', 'Stack/lexical inspection requires PadWalker >= 1.0.';
-test_for 'Lexical::Persistence', 'Strict mode requires Lexical::Persistence.';
-test_for 'Module::CoreList', 'sepia-core-version requires Module::CoreList.';
-test_for 'Devel::Size', 'Printing variable sizes requires Devel::Size.';
-test_for 'Module::Info', 'Module::Info required for some Emacs functions.';
+test_for 'PadWalker', 'Stack/lexical inspection requires PadWalker >= 1.0';
+test_for 'Lexical::Persistence', 'Strict mode requires Lexical::Persistence';
+test_for 'Module::CoreList', 'sepia-core-version requires Module::CoreList';
+test_for 'Devel::Size', 'Printing variable sizes requires Devel::Size';
+test_for 'Module::Info', 'Module::Info required for some Emacs functions';
 
 WriteMakefile(
     'NAME'		=> 'Sepia',
