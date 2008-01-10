@@ -5,13 +5,16 @@ README
 Sepia.html
 Sepia.jpg
 lib/Sepia.pm
-lib/Sepia/Xref.pm
+lib/Sepia/CPAN.pm
 lib/Sepia/Debug.pm
+lib/Sepia/Xref.pm
+sepia-cpan.el
 sepia-ido.el
 sepia-snippet.el
 sepia-tree.el
 sepia-w3m.el
 sepia.el
+sepia.info
 sepia.texi
 t/01basic.t
 t/02completion.t

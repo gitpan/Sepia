@@ -214,7 +214,8 @@ might want to bind your keys, which works best when bound to
     (define-key map "\M-," 'sepia-next)
     (define-key map "\C-\M-x" 'sepia-eval-defun)
     (define-key map "\C-c\C-l" 'sepia-load-file)
-    (define-key map "\C-c\C-d" 'sepia-view-pod)
+    (define-key map "\C-c\C-p" 'sepia-view-pod) ;was cperl-pod-spell
+    (define-key map "\C-c\C-d" 'cperl-perldoc)
     (define-key map "\C-c\C-r" 'sepia-repl)
     (define-key map "\C-c\C-s" 'sepia-scratch)
     (define-key map "\C-c\C-e" 'sepia-eval-expression)
@@ -269,7 +270,9 @@ For modules within packages, see `sepia-module-list'."
     (funcall sepia-module-list-function file)))
 
 (defun sepia-perldoc-buffer ()
-  "View current buffer's POD using pod2html and `browse-url'."
+  "View current buffer's POD using pod2html and `browse-url'.
+
+Interactive users should call `sepia-view-pod'."
   (let ((buffer (get-buffer-create "*sepia-pod*"))
         (errs (get-buffer-create "*sepia-pod-errors*"))
         (inhibit-read-only t))
@@ -307,7 +310,7 @@ For modules within packages, see `sepia-module-list'."
                         '("-MSepia" "-MSepia::Xref"
                           "-e" "Sepia::repl")))))
     (setq sepia-process (get-buffer-process "*sepia-repl*"))
-    (accept-process-output sepia-process 0 1)
+    (accept-process-output sepia-process 1)
     ;; Steal a bit from gud-common-init:
     (setq gud-running t)
     (setq gud-last-last-frame nil)
@@ -753,7 +756,8 @@ also rebuild the xref database."
                           'scalar-context t))
          (res (car tmp))
          (errs (cdr tmp)))
-    (message "sepia: %s returned %s" (abbreviate-file-name file) res)
+    (message "sepia: %s returned %s" (abbreviate-file-name file)
+             (if (equal res "") "undef" res))
     (when (and collect-warnings
                (> (length errs) 1))
       (with-current-buffer (get-buffer-create collect-warnings)
@@ -1007,12 +1011,13 @@ The function is intended to be bound to \\M-TAB, like
 
       ;; Otherwise actually do completion:
       ;; 0 - try a shortcut
+      (when (eq major-mode 'sepia-repl-mode)
       (save-excursion
         (comint-bol)
-        (when (looking-at ",\\([a-z]+\\)\\(?:\\s \\|$\\)")
+          (when (looking-at ",\\([a-z]+\\)$")
           (let ((str (match-string 1)))
             (setq len (length str)
-                  completions (all-completions str sepia-shortcuts)))))
+                    completions (all-completions str sepia-shortcuts))))))
       ;; 1 - Look for a method call:
       (unless completions
         (setq meth (sepia-simple-method-before-point))
@@ -1316,7 +1321,7 @@ With prefix arg, replace the region with the result."
           (when (string-match " line \\([0-9]+\\), near \"\\([^\"]*\\)\""
                               (cdr res))
             (goto-char beg)
-            (beginning-of-line (parse-integer (match-string 1 (cdr res))))
+            (beginning-of-line (string-to-number (match-string 1 (cdr res))))
             (search-forward (match-string 2 (cdr res))
                             (sepia-eol-from (point)) t))
           (message "Error: %s" (cdr res)))
@@ -1363,7 +1368,7 @@ With prefix arg, replace the region with the result."
 When called interactively, the current buffer's
 `default-directory' is used."
   (interactive (list (expand-file-name default-directory)))
-  (sepia-call "Cwd::chdir" dir))
+  (sepia-call "Cwd::chdir" 'list-context dir))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Doc-scanning
@@ -1411,6 +1416,11 @@ When called interactively, the current buffer's
                            short)))
                 ;; e.g. "C<foo(BLAH)>" or "$x = $y->foo()"
                 ((string-match "\\([A-Za-z0-9_:]+\\)\\s *\\(\\$\\|(\\)" short)
+                 (list 'function (match-string-no-properties 1 short)
+                       (or (and (equal short (match-string 1 short)) longdoc)
+                           short)))
+                ;; e.g. "C<$result = foo $args...>"
+                ((string-match "=\\s *\\([A-Za-z0-9_:]+\\)" short)
                  (list 'function (match-string-no-properties 1 short)
                        (or (and (equal short (match-string 1 short)) longdoc)
                            short)))
@@ -1502,7 +1512,7 @@ calling `cperl-describe-perl-symbol'."
                               end t)
       (unless (string= "(eval " (substring (match-string 2) 0 6))
         (throw 'foo (list (match-string 2)
-                          (parse-integer (match-string 3))
+                          (string-to-number (match-string 3))
                           (match-string 1)))))))
 
 (defun sepia-goto-error-at (pos)
