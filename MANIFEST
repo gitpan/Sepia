@@ -21,5 +21,4 @@ t/02completion.t
 t/50expect.t
 t/testy.pl
 ChangeLog
-
 META.yml                                 Module meta-data (added by MakeMaker)
