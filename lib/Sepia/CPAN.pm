@@ -9,24 +9,47 @@ sub init
       CPAN::Index->reload;
 }
 
-sub list
-{
-    grep $_->inst_file, CPAN::Shell->expand('Module', shift || '/./');
-}
-
-sub ls
-{
-    my $want = shift;
-    grep {
-        # XXX: key to test in this order, because inst_file is slow.
-        $_->userid eq $want && $_->inst_file
-    } CPAN::Shell->expand('Module', '/./')
-}
-
 sub interesting_parts
 {
     my $mod = shift;
     +{ map { $_ => scalar $mod->$_ } qw(id cpan_version inst_version fullname cpan_file)};
+}
+
+sub _list
+{
+    CPAN::Shell->expand('Module', shift || '/./');
+}
+
+sub list
+{
+    map { interesting_parts $_ } _list @_
+}
+
+sub _ls
+{
+    my $want = shift;
+    grep {
+        # XXX: key to test in this order, because inst_file is slow.
+        $_->userid eq $want
+    } CPAN::Shell->expand('Module', '/./')
+}
+
+sub ls
+{
+    map { interesting_parts $_ } _ls @_
+}
+
+sub _desc
+{
+    my $pat = qr/$_[0]/i;
+    grep {
+        ($_->description =~ /$pat/ || $_->id =~ /$pat/)
+    } CPAN::Shell->expand('Module', '/./');
+}
+
+sub desc
+{
+    map { interesting_parts $_ } _desc @_;
 }
 
 sub outdated
@@ -69,6 +92,32 @@ sub install
 {
     my $dist = CPAN::Shell->expand('Module', shift);
     $dist->install if $dist;
+}
+
+# Based on CPAN::Shell::_u_r_common
+sub _recommend
+{
+    my $pat = shift || '/./';
+    my (@result, %seen, %need);
+    $version_undefs = $version_zeroes = 0;
+    for my $module (CPAN::Shell->expand('Module',$pat)) {
+        my $file  = $module->cpan_file;
+        next unless defined $file && $module->inst_file;
+        $file =~ s!^./../!!;
+        my $latest = $module->cpan_version;
+        my $have = $module->inst_version;
+        local ($^W) = 0;
+        next unless CPAN::Version->vgt($latest, $have);
+        push @result, $module;
+        next if $seen{$file}++;
+        $need{$module->id}++;
+    }
+    @result;
+}
+
+sub recommend
+{
+    map { interesting_parts $_ } _recommend @_;
 }
 
 1;

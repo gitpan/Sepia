@@ -4,9 +4,7 @@
   '(("r" . sepia-cpan-readme)
     ("d" . sepia-cpan-doc)
     ("i" . sepia-cpan-install)
-    ("b" . sepia-cpan-browse)
-    ("q" . bury-buffer)
-    ("?" . sepia-cpan-readme)))
+    ("q" . bury-buffer)))
 
 ;;;###autoload
 (defun sepia-cpan-doc (mod)
@@ -19,8 +17,11 @@
   "Display the README file for MOD."
   (interactive "sModule: ")
   (with-current-buffer (get-buffer-create "*sepia-cpan-readme*")
-    (insert-file-contents
-     (sepia-call "Sepia::CPAN::readme" 'scalar-context mod 1))
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (insert-file-contents
+       (sepia-call "Sepia::CPAN::readme" 'scalar-context mod 1)))
+    (view-mode 1)
     (pop-to-buffer (current-buffer))))
 
 ;;;###autoload
@@ -28,20 +29,28 @@
   "Install MOD and its prerequisites."
   (interactive "sModule: ")
   (when (y-or-n-p (format "Install %s? " mod))
+    (sepia-eval "require Sepia::CPAN")
     (sepia-call "Sepia::CPAN::install" 'void-context mod)))
 
-;;;###autoload
 (defun sepia-cpan-do-search (pattern)
-  "Return a list modules matching PATTERN."
-  ;; (interactive "sPattern (regexp): ")
-  (sepia-eval (format "do { require Sepia::CPAN; map { Sepia::CPAN::interesting_parts $_ } Sepia::CPAN::list('/%s/') }" pattern)
-              'list-context))
+  "Return a list modules whose names match PATTERN."
+  (sepia-eval "require Sepia::CPAN")
+  (sepia-call "Sepia::CPAN::list" 'list-context (format "/%s/" pattern)))
+
+(defun sepia-cpan-do-desc (pattern)
+  "Return a list modules whose descriptions match PATTERN."
+  (sepia-eval "require Sepia::CPAN")
+  (sepia-call "Sepia::CPAN::recommend" 'list-context pattern))
+
+(defun sepia-cpan-do-recommend (pattern)
+  "Return a list modules whose descriptions match PATTERN."
+  (sepia-eval "require Sepia::CPAN")
+  (sepia-call "Sepia::CPAN::desc" 'list-context pattern))
 
 (defun sepia-cpan-do-list (pattern)
   "Return a list modules matching PATTERN."
   ;; (interactive "sPattern (regexp): ")
-  (sepia-eval (format "do { require Sepia::CPAN; map { Sepia::CPAN::interesting_parts $_ } Sepia::CPAN::ls('%s') }" (upcase pattern))
-              'list-context))
+  (sepia-call "Sepia::CPAN::ls" 'list-context (upcase pattern)))
 
 (defun sepia-cpan-button (button)
   (funcall (cdr (assoc sepia-cpan-button sepia-cpan-actions))
@@ -58,8 +67,11 @@
   (let ((km (make-sparse-keymap)))
     (set-keymap-parent km button-map)
     ;; (define-key km "q" 'bury-buffer)
-    (define-key km "/" 'sepia-cpan-search)
+    (define-key km "/" 'sepia-cpan-desc)
+    (define-key km "S" 'sepia-cpan-desc)
     (define-key km "s" 'sepia-cpan-search)
+    (define-key km "l" 'sepia-cpan-list)
+    (define-key km "R" 'sepia-cpan-recommend)
     (dolist (k (mapcar #'car sepia-cpan-actions))
       (define-key km k 'sepia-cpan-button-press))
     km))
@@ -70,7 +82,7 @@
   'help-echo "[r]eadme, [d]ocumentation, [i]nstall"
   'keymap sepia-cpan-mode-map)
 
-(define-derived-mode sepia-cpan-mode view-mode "CPAN"
+(define-derived-mode sepia-cpan-mode fundamental-mode "CPAN"
   "Major mode for CPAN browsing.")
 
 (defun string-repeat (s n)
@@ -87,12 +99,12 @@
   (let ((inhibit-read-only t))
     (erase-buffer))
   (remove-overlays)
-  (insert (format "\
-%s
-    [r]eadme, [d]ocumentation, [i]nstall, [s]earch, [l]ist, [q]uit
+  (insert title "\
+    [r]eadme, [d]ocumentation, [i]nstall,
+    [s]earch-by-name, [/][S]earch-by-description, [l]ist-for-author, [q]uit
 
-" title))
-  (when mods
+")
+  (when (consp mods)
     (dolist (mod mods)
       (setcdr (assoc "cpan_file" mod)
               (replace-regexp-in-string "^.*/" ""
@@ -123,6 +135,7 @@
 
 ;;;###autoload
 (defun sepia-cpan-list (name)
+  "List modules by author NAME."
   (interactive  "sAuthor: ")
   (sepia-cpan-make-buffer
    (concat "CPAN modules by " name)
@@ -132,10 +145,33 @@
 
 ;;;###autoload
 (defun sepia-cpan-search (pat)
+  "List modules whose names match PAT."
   (interactive  "sPattern (regexp): ")
+  (setq pat (if (string= pat "") "." pat))
   (sepia-cpan-make-buffer
    (concat "CPAN modules matching /" pat "/")
    (sepia-cpan-do-search pat)
+   '("id" "fullname" "inst_version" "cpan_version" "cpan_file")
+   '("Module" "Author" "Inst." "CPAN" "Distribution")))
+
+;;;###autoload
+(defun sepia-cpan-desc (pat)
+  "List modules whose descriptions match PAT."
+  (interactive  "sPattern (regexp): ")
+  (sepia-cpan-make-buffer
+   (concat "CPAN modules with descriptions matching /" pat "/")
+   (sepia-cpan-do-desc pat)
+   '("id" "fullname" "inst_version" "cpan_version" "cpan_file")
+   '("Module" "Author" "Inst." "CPAN" "Distribution")))
+
+;;;###autoload
+(defun sepia-cpan-recommend (pat)
+  "List out-of-date modules."
+  (interactive  "sPattern (regexp): ")
+  (setq pat (if (string= pat "") "." pat))
+  (sepia-cpan-make-buffer
+   (concat "Out-of-date CPAN modules matching /" pat "/")
+   (sepia-cpan-do-recommend pat)
    '("id" "fullname" "inst_version" "cpan_version" "cpan_file")
    '("Module" "Author" "Inst." "CPAN" "Distribution")))
 
