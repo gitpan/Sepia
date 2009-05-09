@@ -24,6 +24,9 @@
 (ignore-errors (require 'sepia-w3m))
 (ignore-errors (require 'sepia-tree))
 (ignore-errors (require 'sepia-ido))
+(ignore-errors (require 'sepia-snippet))
+;; extensions that should always load (autoload later?)
+(require 'sepia-cpan)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Comint communication
@@ -326,11 +329,18 @@ Interactive users should call `sepia-view-pod'."
   (sepia-ensure-process remote-host)
   (pop-to-buffer (get-buffer "*sepia-repl*")))
 
+(defun sepia-cont-or-restart ()
+  (interactive)
+  (if (get-buffer-process (current-buffer))
+      (gud-cont current-prefix-arg)
+    (sepia-repl)))
+
 (defvar sepia-repl-mode-map
   (let ((map (copy-keymap sepia-shared-map)))
     (set-keymap-parent map gud-mode-map)
     (define-key map (kbd "<tab>") 'comint-dynamic-complete)
     (define-key map "\C-a" 'comint-bol)
+    (define-key map "\C-c\C-r" 'sepia-cont-or-restart)
     map)
 
 "Keymap for Sepia interactive mode.")
@@ -339,10 +349,6 @@ Interactive users should call `sepia-view-pod'."
   "Major mode for the Sepia REPL.
 
 \\{sepia-repl-mode-map}"
-    (set (make-local-variable 'comint-dynamic-complete-functions)
-         '(sepia-complete-symbol comint-dynamic-complete-filename))
-    (set (make-local-variable 'comint-preoutput-filter-functions)
-         '(sepia-watch-for-eval))
     ;; (set (make-local-variable 'comint-use-prompt-regexp) t)
     (modify-syntax-entry ?: "_")
     (modify-syntax-entry ?> ".")
@@ -363,6 +369,10 @@ Interactive users should call `sepia-view-pod'."
     (gud-def gud-remove ",delete %l %f" "\C-d" "Delete current breakpoint.")
     ;; Sadly, this hoses our keybindings.
     (compilation-shell-minor-mode 1)
+    (set (make-local-variable 'comint-dynamic-complete-functions)
+         '(sepia-complete-symbol comint-dynamic-complete-filename))
+    (set (make-local-variable 'comint-preoutput-filter-functions)
+         '(sepia-watch-for-eval))
     (run-hooks 'sepia-repl-mode-hook))
 
 (defvar gud-sepia-acc nil
@@ -434,12 +444,12 @@ symbol at point."
          (choices
           (lambda (str &rest blah)
             (let ((completions (xref-completions
-                                str
                                 (case sepia-arg-type
                                   (module nil)
                                   (variable "VARIABLE")
                                   (function "CODE")
-                                  (t nil)))))
+                                  (t nil))
+                                str)))
               (when (eq sepia-arg-type 'module)
                 (setq completions
                       (remove-if (lambda (x) (string-match "::$" x)) completions)))
@@ -959,13 +969,13 @@ expressions would lead to disaster."
           (goto-char pt)
           (sepia-end-of-defun)
           (when (and (>= pt bof) (< pt (point)))
-            (goto-char bof)
-            (looking-at "\\s *sub\\s +")
-            (forward-char (length (match-string 0)))
-            (concat (or (sepia-buffer-package) "")
-                    "::"
-                    (cadr (sepia-ident-at-point))))))
-    (error nil)))
+            (sepia-beginning-of-defun)
+            (when (and (= (point) bof) (looking-at "\\s *sub\\s +"))
+              (forward-char (length (match-string 0)))
+              (concat (or (sepia-buffer-package) "")
+                      "::"
+                      (cadr (sepia-ident-at-point)))))))
+        (error nil)))
 
 (defun sepia-repl-complete ()
   "Try to complete the word at point in the REPL.
@@ -984,10 +994,9 @@ XXX: this needs to be updated whenever you add one on the Perl side.")
 
 (defun sepia-complete-symbol ()
   "Try to complete the word at point.
-The word may be either a global variable if it has a
-sigil (sorry, no lexicals), a module, or a function.  The
-function currently ignores module qualifiers, which may be
-annoying in larger programs.
+The word may be either a global or lexical variable if it has a
+sigil, a module, or a function.  The function currently ignores
+module qualifiers, which may be annoying in larger programs.
 
 The function is intended to be bound to \\M-TAB, like
 `lisp-complete-symbol'."
@@ -1036,7 +1045,6 @@ The function is intended to be bound to \\M-TAB, like
           (setq type typ
                 len (+ (if type 1 0) (length name))
                 completions (xref-completions
-                             name
                              (case type
                                (?$ "VARIABLE")
                                (?@ "ARRAY")
@@ -1044,6 +1052,7 @@ The function is intended to be bound to \\M-TAB, like
                                (?& "CODE")
                                (?* "IO")
                                (t ""))
+                             name
                              (and (eq major-mode 'sepia-mode)
                                   (sepia-function-at-point)))))
         ;; 3 - try a Perl built-in
@@ -1098,21 +1107,18 @@ This function is intended to be bound to TAB."
     map)
  "Keymap for Sepia mode.")
 
-(defvar sepia-mode-abbrev-table nil
-"Abbrevs for Sepia mode.")
-
 ;;;###autoload
 (define-derived-mode sepia-mode cperl-mode "Sepia"
   "Major mode for Perl editing, derived from cperl mode.
 \\{sepia-mode-map}"
-  :abbrev-table nil
   (sepia-init)
   (sepia-install-eldoc)
   (sepia-doc-update)
   (set (make-local-variable 'beginning-of-defun-function)
        'sepia-beginning-of-defun)
   (set (make-local-variable 'end-of-defun-function)
-       'sepia-end-of-defun))
+       'sepia-end-of-defun)
+  (setq indent-line-function 'sepia-indent-line))
 
 (defun sepia-init ()
   "Perform the initialization necessary to start Sepia."
@@ -1186,15 +1192,21 @@ Does not require loading.")
 (defun sepia-scratch-send-line (&optional scalarp)
   "Send the current line to perl, and display the result."
   (interactive "P")
-  (insert "\n"
-   (format "%S" (sepia-eval-raw (concat "scalar do{"
-		       (buffer-substring (sepia-bol-from (point))
-					 (sepia-eol-from (point)))
-		       "}")))
-   "\n"))
+  (insert
+   (format "\n%s\n"
+           (car
+            (sepia-eval-raw
+             (concat "$Sepia::REPL{eval}->(q#"
+                     (buffer-substring (sepia-bol-from (point))
+                                       (sepia-eol-from (point))) "#)"))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Miscellany
+
+(defun sepia-indent-line (&rest args)
+  "Unbind `beginning-of-defun-function' to not confuse `cperl-indent-line'."
+  (let (beginning-of-defun-function)
+    (apply #'cperl-indent-line args)))
 
 (defun sepia-string-count-matches (reg str)
   (let ((n 0)

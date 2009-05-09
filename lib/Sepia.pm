@@ -20,7 +20,7 @@ come with the distribution.
 
 =cut
 
-$VERSION = '0.97';
+$VERSION = '0.98';
 use strict;
 use B;
 use Sepia::Debug;               # THIS TURNS ON DEBUGGING INFORMATION!
@@ -100,13 +100,14 @@ sub repl_size
             my $fmt = '%-'.$len."s%10d\n";
             print 'Var', ' ' x ($len + 2), "Bytes\n";
             print '-' x ($len-4), ' ' x 9, '-' x 5, "\n";
-            local $SIG{__WARN__} = sub {};
+            my %res;
             for (@who) {
                 next unless /^[\$\@\%\&]/; # skip subs.
-                # print STDERR "no strict; package $pkg; Devel::Size::total_size \\$_;";
-                my $res = eval "no strict; package $pkg; Devel::Size::total_size \\$_;";
-                print "aiee: $@\n" if $@;
-                printf $fmt, $_, $res;
+                next if $_ eq '%SIG';
+                $res{$_} = eval "no strict; package $pkg; Devel::Size::total_size \\$_;";
+            }
+            for (sort { $res{$b} <=> $res{$a} } keys %res) {
+                printf $fmt, $_, $res{$_};
             }
         };
         goto &repl_size;
@@ -120,7 +121,7 @@ development.  This package contains the Perl side of the
 implementation, including all user-serviceable parts (for the
 cross-referencing facility see L<Sepia::Xref>).  This document is
 aimed as Sepia developers; for user documentation, see
-L<sepia/index.html>.
+L<Sepia.html> or L<sepia.info>.
 
 Though not intended to be used independent of the Emacs interface, the
 Sepia module's functionality can be used through a rough procedural
@@ -196,6 +197,7 @@ sub filter_typed
 sub maybe_icase
 {
     my $ch = shift;
+    return '' if $ch eq '';
     $ch =~ /[A-Z]/ ? $ch : '['.uc($ch).$ch.']';
 }
 
@@ -248,24 +250,45 @@ sub all_completions
     map { s/^:://; $_ } _completions('::', @parts);
 }
 
+sub lexical_completions
+{
+    eval { require PadWalker; import PadWalker 'peek_sub' };
+    # "internal" function, so don't warn on failure
+    return if $@;
+    *lexical_completions = sub {
+        my ($type, $str, $sub) = @_;
+        $sub = "$PACKAGE\::$sub" unless $sub =~ /::/;
+        # warn "Completing $str of type $type in $sub\n";
+        no strict;
+        return unless defined *{$sub}{CODE};
+        my $pad = peek_sub(\&$sub);
+        if ($type) {
+            map { s/^[\$\@&\%]//;$_ } grep /^\Q$type$str\E/, keys %$pad;
+        } else {
+            map { s/^[\$\@&\%]//;$_ } grep /^.\Q$str\E/, keys %$pad;
+        }
+    };
+    goto &lexical_completions;
+}
+
 sub completions
 {
-    my ($type, $str, $t);
+    my ($type, $str, $sub) = @_;
+    my $t;
     my %h = qw(@ ARRAY % HASH & CODE * IO $ SCALAR);
     my %rh;
     @rh{values %h} = keys %h;
-    if (@_ == 1) {
-        ($type, $str) = $_[0] =~ /^([\%\$\@\&]?)(.*)/;
-        $t = $type || '';
-    $type = $h{$type} if $type;
-    } else {
-        ($str, $type) = @_;
-        $type ||= '';
-        $t = $rh{$type} if $type;
+    $type ||= '';
+    $t = $type ? $rh{$type} : '';
+    my @ret;
+    if ($sub && $type ne '') {
+        @ret = lexical_completions $t, $str, $sub;
     }
-    my @ret = grep {
-        $type ? filter_typed $type : filter_untyped
-    } all_completions $str;
+    if (!@ret) {
+        @ret = grep {
+            $type ? filter_typed $type : filter_untyped
+        } all_completions $str;
+    }
     if (!@ret && $str !~ /:/) {
         @ret = grep {
             $type ? filter_typed $type : filter_untyped
@@ -275,7 +298,7 @@ sub completions
 #     ## XXX: Control characters, $", and $1, etc. confuse Emacs, so
 #     ## remove them.
     grep {
-        length > 0 && !looks_like_number $_ && !/^[^\w\d_]$/ && !/^_</ && !/^[[:cntrl:]]/
+        length $_ > 0 && !looks_like_number($_) && !/^[^\w\d_]$/ && !/^_</ && !/^[[:cntrl:]]/
     } @ret;
 }
 
@@ -789,8 +812,10 @@ sub repl_help
         $args =~ s/\s+$//;
         my $full = $RK{$args};
         if ($full) {
-            print "$RK{$full}    ",
-                flow($width - length $RK{$full} - 4, $REPL_DOC{$full}), "\n";
+            my $short = $REPL_SHORT{$full};
+            my $flow = flow($width - length $short - 4, $REPL_DOC{$full});
+            $flow =~ s/(.)\n/"$1\n".(' 'x (4 + length $short))/eg;
+            print "$short    $flow\n";
         } else {
             print "$args: no such command\n";
         }
@@ -932,7 +957,7 @@ sub repl_who
 {
     my ($pkg, $re) = split ' ', shift;
     no strict;
-    if ($pkg =~ /^\/(.*)\/?$/) {
+    if ($pkg && $pkg =~ /^\/(.*)\/?$/) {
         $pkg = $PACKAGE;
         $re = $1;
     } elsif (!$re && !%{$pkg.'::'}) {
@@ -1271,18 +1296,39 @@ sub html_module_list
     return unless $inst;
     my $out;
     open OUT, ">", $file || \$out or return;
-    print OUT "<html><body><ul>";
+    print OUT "<html><body>";
     my $pfx = '';
     my %ns;
     for (package_list) {
         push @{$ns{$1}}, $_ if /^([^:]+)/;
     }
+    # Handle core modules.
+    my %fs;
+    undef $fs{$_} for map {
+        s/.*man.\///; s|/|::|g; s/\.\d(?:pm)?$//; $_
+    } grep {
+        /\.\d(?:pm)?$/ && !/man1/ && !/usr\/bin/ # && !/^(?:\/|perl)/
+    } $inst->files('Perl');
+    my @fs = sort keys %fs;
+    print OUT qq{<h2>Core Modules</h2><ul>};
+    for (@fs) {
+        print OUT qq{<li><a href="$base$_">$_</a>};
+    }
+    print OUT '</ul><h2>Installed Modules</h2><ul>';
+
+    # handle the rest
     for (sort keys %ns) {
+        next if $_ eq 'Perl';   # skip Perl core.
         print OUT qq{<li><b>$_</b><ul>} if @{$ns{$_}} > 1;
         for (sort @{$ns{$_}}) {
-            my @fs = map {
+            my %fs;
+            undef $fs{$_} for map {
                 s/.*man.\///; s|/|::|g; s/\.\d(?:pm)?$//; $_
-            } grep /\.\d(?:pm)?$/, sort $inst->files($_);
+            } grep {
+                /\.\d(?:pm)?$/ && !/man1/
+            } $inst->files($_);
+            my @fs = sort keys %fs;
+            next unless @fs > 0;
             if (@fs == 1) {
                 print OUT qq{<li><a href="$base$fs[0]">$fs[0]</a>};
             } else {
@@ -1295,6 +1341,7 @@ sub html_module_list
         }
         print OUT qq{</ul>} if @{$ns{$_}} > 1;
     }
+
     print OUT "</ul></body></html>\n";
     close OUT;
     $file ? 1 : $out;
@@ -1352,7 +1399,7 @@ Bug reports welcome, patches even more welcome.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2005-2008 Sean O'Rourke.  All rights reserved, some
+Copyright (C) 2005-2009 Sean O'Rourke.  All rights reserved, some
 wrongs reversed.  This module is distributed under the same terms as
 Perl itself.
 

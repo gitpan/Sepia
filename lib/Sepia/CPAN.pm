@@ -12,7 +12,27 @@ sub init
 sub interesting_parts
 {
     my $mod = shift;
-    +{ map { $_ => scalar $mod->$_ } qw(id cpan_version inst_version fullname cpan_file)};
+    # XXX: stupid CPAN.pm functions die for some modules...
+    +{ map {
+        $_ => scalar eval { $mod->$_ }
+    } qw(id cpan_version inst_version fullname cpan_file)};
+}
+
+# only list the "root" module of each package.
+sub group_by_dist
+{
+    my %h;
+    for (@_) {
+        my $cf = $_->{cpan_file};
+        if (exists $h{$cf}) {
+            if (length $h{$cf}{id} > length $_->{id}) {
+                $h{$cf} = $_;
+            }
+        } else {
+            $h{$_->{cpan_file}} = $_;
+        }
+    }
+    sort { $a->{id} cmp $b->{id} } values %h;
 }
 
 sub _list
@@ -22,7 +42,7 @@ sub _list
 
 sub list
 {
-    map { interesting_parts $_ } _list @_
+    group_by_dist map { interesting_parts $_ } _list @_
 }
 
 sub _ls
@@ -36,20 +56,21 @@ sub _ls
 
 sub ls
 {
-    map { interesting_parts $_ } _ls @_
+    group_by_dist map { interesting_parts $_ } _ls @_
 }
 
 sub _desc
 {
     my $pat = qr/$_[0]/i;
     grep {
+        $_->description &&
         ($_->description =~ /$pat/ || $_->id =~ /$pat/)
     } CPAN::Shell->expand('Module', '/./');
 }
 
 sub desc
 {
-    map { interesting_parts $_ } _desc @_;
+    group_by_dist map { interesting_parts $_ } _desc @_;
 }
 
 sub outdated
@@ -117,7 +138,7 @@ sub _recommend
 
 sub recommend
 {
-    map { interesting_parts $_ } _recommend @_;
+    group_by_dist map { interesting_parts $_ } _recommend @_;
 }
 
 1;

@@ -1,3 +1,4 @@
+(require 'cl)
 (require 'button)
 
 (defvar sepia-cpan-actions
@@ -40,23 +41,24 @@
 (defun sepia-cpan-do-desc (pattern)
   "Return a list modules whose descriptions match PATTERN."
   (sepia-eval "require Sepia::CPAN")
-  (sepia-call "Sepia::CPAN::recommend" 'list-context pattern))
+  (sepia-call "Sepia::CPAN::desc" 'list-context pattern))
 
 (defun sepia-cpan-do-recommend (pattern)
   "Return a list modules whose descriptions match PATTERN."
   (sepia-eval "require Sepia::CPAN")
-  (sepia-call "Sepia::CPAN::desc" 'list-context pattern))
+  (sepia-call "Sepia::CPAN::recommend" 'list-context pattern))
 
 (defun sepia-cpan-do-list (pattern)
   "Return a list modules matching PATTERN."
   ;; (interactive "sPattern (regexp): ")
+  (sepia-eval "require Sepia::CPAN")
   (sepia-call "Sepia::CPAN::ls" 'list-context (upcase pattern)))
+
+(defvar sepia-cpan-button)
 
 (defun sepia-cpan-button (button)
   (funcall (cdr (assoc sepia-cpan-button sepia-cpan-actions))
            (button-label button)))
-
-(defvar sepia-cpan-button)
 
 (defun sepia-cpan-button-press ()
   (interactive)
@@ -105,31 +107,37 @@
 
 ")
   (when (consp mods)
-    (dolist (mod mods)
-      (setcdr (assoc "cpan_file" mod)
-              (replace-regexp-in-string "^.*/" ""
-                                        (cdr (assoc "cpan_file" mod)))))
-    (setq lengths
-          (mapcar
-           (lambda (f)
-             (+ 2 (apply #'max (mapcar
+    (let (lengths)
+      (dolist (mod mods)
+        (setcdr (assoc "cpan_file" mod)
+                (replace-regexp-in-string "^.*/" ""
+                                          (cdr (assoc "cpan_file" mod)))))
+      (setq
+       lengths
+       (mapcar* #'max
+                (mapcar (lambda (x) (+ 2 (length x))) names)
+                (mapcar
+                 (lambda (f)
+                   (+ 2 (apply #'max
+                               (mapcar
                                 (lambda (x)
                                   (length (format "%s" (cdr (assoc f x)))))
                                 mods))))
-           fields))
-    (setq fmt
-          (concat (mapconcat (lambda (x) (format "%%-%ds" x)) lengths "")
-                  "\n"))
-    (insert (apply 'format fmt names))
-    (insert (apply 'format fmt
-                   (mapcar (lambda (x) (string-repeat "-" (length x))) names)))
-    (dolist (mod mods)
-      (let ((beg (point)))
-        (insert
-         (apply #'format fmt
-                (mapcar (lambda (x) (or (cdr (assoc x mod)) "-")) fields)))
-        (make-button beg (+ beg (length (cdr (assoc "id" mod))))
-                     :type 'sepia-cpan))))
+                 fields)))
+          
+      (setq fmt
+            (concat (mapconcat (lambda (x) (format "%%-%ds" x)) lengths "")
+                    "\n"))
+      (insert (apply 'format fmt names))
+      (insert (apply 'format fmt
+                     (mapcar (lambda (x) (string-repeat "-" (length x))) names)))
+      (dolist (mod mods)
+        (let ((beg (point)))
+          (insert
+           (apply #'format fmt
+                  (mapcar (lambda (x) (or (cdr (assoc x mod)) "-")) fields)))
+          (make-button beg (+ beg (length (cdr (assoc "id" mod))))
+                       :type 'sepia-cpan)))))
   (setq buffer-read-only t
         truncate-lines t))
 
