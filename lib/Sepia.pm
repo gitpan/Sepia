@@ -20,7 +20,7 @@ come with the distribution.
 
 =cut
 
-$VERSION = '0.99_01';
+$VERSION = '0.99';
 use strict;
 use B;
 use Sepia::Debug;               # THIS TURNS ON DEBUGGING INFORMATION!
@@ -33,7 +33,7 @@ use Storable qw(store retrieve);
 use vars qw($PS1 %REPL %RK %REPL_DOC %REPL_SHORT %PRINTER
             @REPL_RESULT @res
             $REPL_LEVEL $PACKAGE $WANTARRAY $PRINTER $STRICT $PRINT_PRETTY
-            $ISEVAL);
+            $ISEVAL $LAST_INPUT);
 
 sub repl_strict
 {
@@ -252,6 +252,21 @@ sub all_completions
     map { s/^:://; $_ } _completions('::', @parts);
 }
 
+# Filter exact matches so that e.g. "A::x" completes to "A::xx" when
+# both "Ay::xx" and "A::xx" exist.
+sub filter_exact_prefix
+{
+    my @parts = split /:+/, shift, -1;
+    my @res = @_;
+    my @tmp;
+    my $pre = shift @parts;
+    while (@parts && (@tmp = grep /^\Q$pre\E(?:::|$)/, @res)) {
+        @res = @tmp;
+        $pre .= '::'.shift @parts;
+    }
+    @res;
+}
+
 sub lexical_completions
 {
     eval { require PadWalker; import PadWalker 'peek_sub' };
@@ -296,7 +311,7 @@ sub completions
             $type ? filter_typed $type : filter_untyped
         } all_abbrev_completions $str;
     }
-    @ret = map { s/^:://; "$t$_" } @ret;
+    @ret = map { s/^:://; "$t$_" } filter_exact_prefix $str, @ret;
 #     ## XXX: Control characters, $", and $1, etc. confuse Emacs, so
 #     ## remove them.
     grep {
@@ -838,7 +853,7 @@ sub define_shortcuts
         'strict [0|1]', 'Turn \'use strict\' mode on or off';
     define_shortcut 'quit', \&Sepia::repl_quit,
         'Quit the REPL';
-    define_shortcut 'reload', \&Sepia::repl_reload,
+    define_shortcut 'restart', \&Sepia::repl_restart,
         'Reload Sepia.pm and relaunch the REPL.';
     define_shortcut 'shell', \&Sepia::repl_shell,
         'shell CMD ...', 'Run CMD in the shell';
@@ -858,6 +873,10 @@ sub define_shortcuts
         'load [FILE]', 'Load state from FILE.';
     define_shortcut save => \&Sepia::repl_save,
         'save [PATTERN [FILE]]', 'Save variables matching PATTERN to FILE.';
+    define_shortcut reload => \&Sepia::repl_reload,
+        'reload [MODULE | /RE/]', 'Reload MODULE, or all modules matching RE.';
+    define_shortcut freload => \&Sepia::repl_full_reload,
+        'freload MODULE', 'Reload MODULE and all its dependencies.';
 }
 
 sub repl_help
@@ -1082,11 +1101,11 @@ sub repl_quit
     last repl;
 }
 
-sub repl_reload
+sub repl_restart
 {
     do $INC{'Sepia.pm'};
     if ($@) {
-        print "Reload failed:\n$@\n";
+        print "Restart failed:\n$@\n";
     } else {
         $REPL_LEVEL = 0;        # ok?
         goto &Sepia::repl;
@@ -1161,6 +1180,60 @@ sub repl_save
     $re ||= '.';
     $file ||= "$ENV{HOME}/.sepia-save";
     store save($re), $file;
+}
+
+sub full_reload
+{
+    (my $name = shift) =~ s!::!/!g;
+    $name .= '.pm';
+    print STDERR "full reload $name\n";
+    my %save_inc = %INC;
+    local %INC;
+    require $name;
+    my @ret = keys %INC;
+    while (my ($k, $v) = each %save_inc) {
+        $INC{$k} ||= $v;
+    }
+    @ret;
+}
+
+sub repl_full_reload
+{
+    chomp (my $pat = shift);
+    my @x = full_reload $pat;
+    print "Reloaded: @x\n";
+}
+
+sub repl_reload
+{
+    chomp (my $pat = shift);
+    if ($pat =~ /^\/(.*)\/?$/) {
+        $pat = $1;
+        $pat =~ s#::#/#g;
+        $pat = qr/$pat/;
+        my @rel;
+        for (keys %INC) {
+            next unless /$pat/;
+            if (!do $_) {
+                print "$_: $@\n";
+            }
+            s#/#::#g;
+            s/\.pm$//;
+            push @rel, $_;
+        }
+    } else {
+        my $mod = $pat;
+        $pat =~ s#::#/#g;
+        $pat .= '.pm';
+        if (exists $INC{$pat}) {
+            delete $INC{$pat};
+            eval 'require $mod';
+            import $mod if $@;
+            print "Reloaded $mod.\n"
+        } else {
+            print "$mod not loaded.\n"
+        }
+    }
 }
 
 ## Collects warnings for REPL
@@ -1295,6 +1368,14 @@ sub repl
             @warn = ();
             unless ($SIG{__WARN__}) {
                 $SIG{__WARN__} = 'Sepia::sig_warn';
+            }
+            if (!$ISEVAL) {
+                if ($buf eq '') {
+                    # repeat last interactive command
+                    $buf = $LAST_INPUT;
+                } else {
+                    $LAST_INPUT = $buf;
+                }
             }
             if ($buf =~ /^,(\S+)\s*(.*)/s) {
                 ## Inspector shortcuts
@@ -1468,6 +1549,22 @@ sub html_package_list
     print OUT "</ul></body></html>\n";
     close OUT;
     $file ? 1 : $out;
+}
+
+sub apropos_module
+{
+    my $re = qr/$_[0]/;
+    my $inst = inst();
+    my %ret;
+    for (package_list) {
+        undef $ret{$_} if /$re/;
+    }
+    undef $ret{$_} for map {
+        s/.*man.\///; s|/|::|g; s/\.\d(?:pm)?$//; $_
+    } grep {
+        /\.\d(?:pm)?$/ && !/man1/ && !/usr\/bin/ && /$re/
+    } $inst->files('Perl');
+    sort keys %ret;
 }
 
 1;
