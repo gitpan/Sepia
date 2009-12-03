@@ -1,3 +1,59 @@
+2009-12-02  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia/Xref.pm (load_pad): work around pad weirdness with
+	threads.
+	* VERSION: 0.991_01
+
+2009-11-29  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* Makefile.PL: make LWP::Simple optional.  It didn't do much.
+	* sepia-snippet.el (sepia-snippet-abbrev): de-dup, sort, add
+	given/when.
+	* sepia.el (sepia-shortcuts): update.
+	(sepia-complete-symbol): fix sigil duplication bug.
+	(sepia-symbol-info): use cperl's variable short-docs.
+
+2009-11-26  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm: reorganize, add docs.
+	* sepia.texi (Shortcuts): document ,time
+	* Makefile.PL: optional BSD::Resource and Time::HiRes.
+	* lib/Sepia.pm (run_hook,add_hook,remove_hook): new functions.
+	(repl_time,time_pre_prompt*): print CPU times.
+
+2009-11-25  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* sepia.el (sepia-ident-before-point): use s-i-at-point.
+	(sepia-ident-at-point): Handle punctuation variables.
+	(sepia-describe-object): add "perldoc -v" support.
+
+2009-11-22  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm (location): handle special @INC entries.
+	* sepia.el (sepia-describe-object): Guess identifier-at-point in
+	the right order.
+
+2009-11-18  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* sepia.el (sepia-describe-object): new function like
+	describe-function and friends.  Currently only "perldoc -f."
+	(sepia-init-perl-builtins): bugfix.
+	(sepia-repl-mode): turn on eldoc.
+
+2009-11-02  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm (location): change to work on only one location,
+	since that's how it's used.
+	(define_shortcuts): tweak.
+	(repl_setup): fix $REPL_LEVEL bug.
+	(repl,repl_quit): make quitting from restarted REPLs.
+
+2009-10-28  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* sepia.el (sepia-indent-or-complete): work around bug where
+	expand-abbrev returns nil even though it expanded.
+	(sepia-looks-like-module): use xref-apropos-module.
+
 2009-10-19  Sean O'Rourke  <seano@cs.ucla.edu>
 
 	* sepia-cpan.el (sepia-cpan-mode-map): initialize in definition;

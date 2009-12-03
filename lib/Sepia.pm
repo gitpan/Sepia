@@ -18,9 +18,22 @@ At the prompt in the C<*sepia-repl*> buffer:
 For more information, please see F<Sepia.html> or F<sepia.info>, which
 come with the distribution.
 
+=head1 DESCRIPTION
+
+Sepia is a set of features to make Emacs a better tool for Perl
+development.  This package contains the Perl side of the
+implementation, including all user-serviceable parts (for the
+cross-referencing facility see L<Sepia::Xref>).  This document is
+aimed as Sepia developers; for user documentation, see
+L<Sepia.html> or L<sepia.info>.
+
+Though not intended to be used independent of the Emacs interface, the
+Sepia module's functionality can be used through a rough procedural
+interface.
+
 =cut
 
-$VERSION = '0.991';
+$VERSION = '0.991_01';
 use strict;
 use B;
 use Sepia::Debug;               # THIS TURNS ON DEBUGGING INFORMATION!
@@ -31,38 +44,9 @@ use File::Find;
 use Storable qw(store retrieve);
 
 use vars qw($PS1 %REPL %RK %REPL_DOC %REPL_SHORT %PRINTER
-            @REPL_RESULT @res
-            $REPL_LEVEL $PACKAGE $WANTARRAY $PRINTER $STRICT $PRINT_PRETTY
-            $ISEVAL $LAST_INPUT);
-
-sub repl_strict
-{
-    eval { require Lexical::Persistence; import Lexical::Persistence };
-    if ($@) {
-        print "Strict mode requires Lexical::Persistence.\n";
-    } else {
-        *repl_strict = sub {
-            my $x = as_boolean(shift, $STRICT);
-            if ($x && !$STRICT) {
-                $STRICT = new Lexical::Persistence;
-            } elsif (!$x) {
-                undef $STRICT;
-            }
-        };
-        goto &repl_strict;
-    }
-}
-
-sub core_version
-{
-    eval { require Module::CoreList };
-    if ($@) {
-        '???';
-    } else {
-        *core_version = sub { Module::CoreList->first_release(@_) };
-        goto &core_version;
-    }
-}
+            @REPL_RESULT @res $REPL_LEVEL $REPL_QUIT $PACKAGE
+            $WANTARRAY $PRINTER $STRICT $PRINT_PRETTY $ISEVAL
+            $LAST_INPUT @PRE_EVAL @POST_EVAL @PRE_PROMPT);
 
 BEGIN {
     eval { use List::Util 'max' };
@@ -77,74 +61,71 @@ BEGIN {
     }
 }
 
-sub repl_size
+=head2 Hooks
+
+Like Emacs, Sepia's behavior can be modified by placing functions on
+various hooks (arrays).  Hooks can be manipulated by the following
+functions:
+
+=over
+
+=item C<add_hook(@hook, @functions)> -- Add C<@functions> to C<@hook>.
+
+=item C<remove_hook(@hook, @functions)> -- Remove named C<@functions> from C<@hook>.
+
+=item C<run_hook(@hook)> -- Run the functions on the named hook.
+
+Each function is called with no arguments in an eval {} block, and
+its return value is ignored.
+
+=back
+
+Sepia currently defines the following hooks:
+
+=over
+
+=item C<@PRE_PROMPT> -- Called immediately before the prompt is printed.
+
+=item C<@PRE_EVAL> -- Called immediately before evaluating user input.
+
+=item C<@POST_EVAL> -- Called immediately after evaluating user input.
+
+=back
+
+=cut
+
+sub run_hook(\@)
 {
-    eval { require Devel::Size };
-    if ($@) {
-        print "Size requires Devel::Size.\n";
-    } else {
-        *Sepia::repl_size = sub {
-            no strict 'refs';
-            ## XXX: C&P from repl_who:
-            my ($pkg, $re) = split ' ', shift || '';
-            if ($pkg =~ /^\/(.*)\/?$/) {
-                $pkg = $PACKAGE;
-                $re = $1;
-            } elsif (!$re && !%{$pkg.'::'}) {
-                $re = $pkg;
-                $pkg = $PACKAGE;
-            } else {
-                $re = '';
-                $pkg = $PACKAGE;
-            }
-            my @who = who($pkg, $re);
-            my $len = max(3, map { length } @who) + 4;
-            my $fmt = '%-'.$len."s%10d\n";
-            print 'Var', ' ' x ($len + 2), "Bytes\n";
-            print '-' x ($len-4), ' ' x 9, '-' x 5, "\n";
-            my %res;
-            for (@who) {
-                next unless /^[\$\@\%\&]/; # skip subs.
-                next if $_ eq '%SIG';
-                $res{$_} = eval "no strict; package $pkg; Devel::Size::total_size \\$_;";
-            }
-            for (sort { $res{$b} <=> $res{$a} } keys %res) {
-                printf $fmt, $_, $res{$_};
-            }
-        };
-        goto &repl_size;
+    my $hook = shift;
+    no strict 'refs';
+    for (@$hook) {
+        eval { $_->() };
     }
 }
 
-=head1 DESCRIPTION
+sub add_hook(\@@)
+{
+    my $hook = shift;
+    for my $h (@_) {
+        push @$hook, $h unless grep $h eq $_, @$hook;
+    }
+}
 
-Sepia is a set of features to make Emacs a better tool for Perl
-development.  This package contains the Perl side of the
-implementation, including all user-serviceable parts (for the
-cross-referencing facility see L<Sepia::Xref>).  This document is
-aimed as Sepia developers; for user documentation, see
-L<Sepia.html> or L<sepia.info>.
+sub remove_hook(\@@)
+{
+    my $hook = shift;
+    @$hook = grep { my $x = $_; !grep $_ eq $x, @$hook } @$hook;
+}
 
-Though not intended to be used independent of the Emacs interface, the
-Sepia module's functionality can be used through a rough procedural
-interface.
+=head2 Completion
 
-=head2 C<@compls = completions($string [, $type])>
+Sepia tries hard to come up with a list of completions.
 
-Find a list of completions for C<$string> with glob type C<$type>,
-which may be "SCALAR", "HASH", "ARRAY", "CODE", "IO", or the special
-value "VARIABLE", which means either scalar, hash, or array.
-Completion operates on word subparts separated by [:_], so
-e.g. "S:m_w" completes to "Sepia::my_walksymtable".
+=over
 
-=head2 C<@compls = method_completions($expr, $string [,$eval])>
+=item C<$re = _apropos_re($pat)>
 
-Complete among methods on the object returned by C<$expr>.  The
-C<$eval> argument, if present, is a function used to do the
-evaluation; the default is C<eval>, but for example the Sepia REPL
-uses C<Sepia::repl_eval>.  B<Warning>: Since it has to evaluate
-C<$expr>, method completion can be extremely problematic.  Use with
-care.
+Create a completion expression from user input.
 
 =cut
 
@@ -171,6 +152,19 @@ BEGIN {
     %sigil = qw(ARRAY @ SCALAR $ HASH %);
 }
 
+=item C<$val = filter_untyped>
+
+Return true if C<$_> is the name of a sub, file handle, or package.
+
+=item C<$val = filter_typed $type>
+
+Return true if C<$_> is the name of something of C<$type>, which
+should be either a glob slot name (e.g. SCALAR) or the special value
+"VARIABLE", meaning an array, hash, or scalar.
+
+=cut
+
+
 sub filter_untyped
 {
     no strict;
@@ -196,12 +190,24 @@ sub filter_typed
     }
 }
 
+=item C<$re_out = maybe_icase $re_in>
+
+Make C<$re_in> case-insensitive if it looks like it should be.
+
+=cut
+
 sub maybe_icase
 {
     my $ch = shift;
     return '' if $ch eq '';
     $ch =~ /[A-Z]/ ? $ch : '['.uc($ch).$ch.']';
 }
+
+=item C<@res = all_abbrev_completions $pattern>
+
+Find all "abbreviated completions" for $pattern.
+
+=cut
 
 sub all_abbrev_completions
 {
@@ -252,8 +258,13 @@ sub all_completions
     map { s/^:://; $_ } _completions('::', @parts);
 }
 
-# Filter exact matches so that e.g. "A::x" completes to "A::xx" when
-# both "Ay::xx" and "A::xx" exist.
+=item C<@res = filter_exact_prefix @names>
+
+Filter exact matches so that e.g. "A::x" completes to "A::xx" when
+both "Ay::xx" and "A::xx" exist.
+
+=cut
+
 sub filter_exact_prefix
 {
     my @parts = split /:+/, shift, -1;
@@ -266,6 +277,13 @@ sub filter_exact_prefix
     }
     @res;
 }
+
+=item C<@res = lexical_completions $type, $str, $sub>
+
+Find lexicals of C<$sub> (or a parent lexical environment) of type
+C<$type> matching C<$str>.
+
+=cut
 
 sub lexical_completions
 {
@@ -287,6 +305,25 @@ sub lexical_completions
     };
     goto &lexical_completions;
 }
+
+=item C<@compls = completions($string [, $type])>
+
+Find a list of completions for C<$string> with glob type C<$type>,
+which may be "SCALAR", "HASH", "ARRAY", "CODE", "IO", or the special
+value "VARIABLE", which means either scalar, hash, or array.
+Completion operates on word subparts separated by [:_], so
+e.g. "S:m_w" completes to "Sepia::my_walksymtable".
+
+=item C<@compls = method_completions($expr, $string [,$eval])>
+
+Complete among methods on the object returned by C<$expr>.  The
+C<$eval> argument, if present, is a function used to do the
+evaluation; the default is C<eval>, but for example the Sepia REPL
+uses C<Sepia::repl_eval>.  B<Warning>: Since it has to evaluate
+C<$expr>, method completion can be extremely problematic.  Use with
+care.
+
+=cut
 
 sub completions
 {
@@ -315,7 +352,7 @@ sub completions
 #     ## XXX: Control characters, $", and $1, etc. confuse Emacs, so
 #     ## remove them.
     grep {
-        length $_ > 0 && !looks_like_number($_) && !/^[^\w\d_]$/ && !/^_</ && !/^[[:cntrl:]]/
+        length $_ > 0 && !/^\d+$/ && !/^[^\w\d_]$/ && !/^_</ && !/^[[:cntrl:]]/
     } @ret;
 }
 
@@ -337,53 +374,7 @@ sub method_completions
     }
 }
 
-=head2 C<@locs = location(@names)>
-
-Return a list of [file, line, name] triples, one for each function
-name in C<@names>.
-
-=cut
-
-sub location
-{
-    no strict;
-    my @x= map {
-        my $str = $_;
-        if (my ($pfx, $name) = $str =~ /^([\%\$\@]?)(.+)/) {
-            if ($pfx) {
-                warn "Sorry -- can't lookup variables.";
-                [];
-            } else {
-                # XXX: svref_2object only seems to work with a package
-                # tacked on, but that should probably be done
-                # elsewhere...
-                $name = 'main::'.$name unless $name =~ /::/;
-                my $cv = B::svref_2object(\&{$name});
-                if ($cv && defined($cv = $cv->START) && !$cv->isa('B::NULL')) {
-                    my ($file, $line) = ($cv->file, $cv->line);
-                    if ($file !~ /^\//) {
-                        for (@INC) {
-                            if (-f "$_/$file") {
-                                $file = "$_/$file";
-                                last;
-                            }
-                        }
-                    }
-                    my ($shortname) = $name =~ /^(?:.*::)([^:]+)$/;
-                    [Cwd::abs_path($file), $line, $shortname || $name]
-                } else {
-#                    warn "Bad CV for $name: $cv";
-                    [];
-                }
-            }
-        } else {
-            []
-        }
-    } @_;
-    return @x;
-}
-
-=head2 C<@matches = apropos($name [, $is_regex])>
+=item C<@matches = apropos($name [, $is_regex])>
 
 Search for function C<$name>, either in all packages or, if C<$name>
 is qualified, only in one package.  If C<$is_regex> is true, the
@@ -445,7 +436,13 @@ sub apropos
     }
 }
 
-=head2 C<@names = mod_subs($pack)>
+=back
+
+=head2 Module information
+
+=over
+
+=item C<@names = mod_subs($pack)>
 
 Find subs in package C<$pack>.
 
@@ -461,7 +458,7 @@ sub mod_subs
     }
 }
 
-=head2 C<@decls = mod_decls($pack)>
+=item C<@decls = mod_decls($pack)>
 
 Generate a list of declarations for all subroutines in package
 C<$pack>.
@@ -481,7 +478,7 @@ sub mod_decls
     return wantarray ? @ret : join '', @ret;
 }
 
-=head2 C<$info = module_info($module, $type)>
+=item C<$info = module_info($module, $type)>
 
 Emacs-called function to get module information.
 
@@ -515,7 +512,7 @@ sub module_info
     }
 }
 
-=head2 C<$file = mod_file($mod)>
+=item C<$file = mod_file($mod)>
 
 Find the likely file owner for module C<$mod>.
 
@@ -531,9 +528,9 @@ sub mod_file
     $m ? $INC{"$m.pm"} : undef;
 }
 
-=head2 C<@mods = package_list>
+=item C<@mods = package_list>
 
-Gather a list of all distributions on the system. XXX UNUSED
+Gather a list of all distributions on the system.
 
 =cut
 
@@ -552,7 +549,7 @@ sub package_list
     sort { $a cmp $b } inst()->modules;
 }
 
-=head2 C<@mods = module_list>
+=item C<@mods = module_list>
 
 Gather a list of all packages (.pm files, really) installed on the
 system, grouped by distribution. XXX UNUSED
@@ -572,10 +569,12 @@ sub module_list
     } @_;
 }
 
-=head2 C<@mods = doc_list>
+=item C<@mods = doc_list>
 
 Gather a list of all documented packages (.?pm files, really)
 installed on the system, grouped by distribution. XXX UNUSED
+
+=back
 
 =cut
 
@@ -590,7 +589,63 @@ sub doc_list
     } @_;
 }
 
-=head2 C<lexicals($subname)>
+=head2 Miscellaneous functions
+
+=over
+
+=item C<$v = core_version($module)>
+
+=cut
+
+sub core_version
+{
+    eval { require Module::CoreList };
+    if ($@) {
+        '???';
+    } else {
+        *core_version = sub { Module::CoreList->first_release(@_) };
+        goto &core_version;
+    }
+}
+
+=item C<[$file, $line, $name] = location($name)>
+
+Return a [file, line, name] triple for function C<$name>.
+
+=cut
+
+sub location
+{
+    no strict;
+    map {
+        if (my ($pfx, $name) = /^([\%\$\@]?)(.+)/) {
+            if ($pfx) {
+                warn "Sorry -- can't lookup variables.";
+            } else {
+                # XXX: svref_2object only seems to work with a package
+                # tacked on, but that should probably be done elsewhere...
+                $name = 'main::'.$name unless $name =~ /::/;
+                my $cv = B::svref_2object(\&{$name});
+                if ($cv && defined($cv = $cv->START) && !$cv->isa('B::NULL')) {
+                    my ($file, $line) = ($cv->file, $cv->line);
+                    if ($file !~ /^\//) {
+                        for (@INC) {
+                            if (!ref $_ && -f "$_/$file") {
+                                $file = "$_/$file";
+                                last;
+                            }
+                        }
+                    }
+                    my ($shortname) = $name =~ /^(?:.*::)([^:]+)$/;
+                    return [Cwd::abs_path($file), $line, $shortname || $name]
+                }
+            }
+        }
+        []
+    } @_;
+}
+
+=item C<lexicals($subname)>
 
 Return a list of C<$subname>'s lexical variables.  Note that this
 includes all nested scopes -- I don't know if or how Perl
@@ -608,7 +663,7 @@ sub lexicals
     } grep B::class($_) ne 'SPECIAL', $names->ARRAY;
 }
 
-=head2 C<$lisp = tolisp($perl)>
+=item C<$lisp = tolisp($perl)>
 
 Convert a Perl scalar to some ELisp equivalent.
 
@@ -646,7 +701,7 @@ sub tolisp($)
     }
 }
 
-=head2 C<printer(\@res, $wantarray)>
+=item C<printer(\@res, $wantarray)>
 
 Print C<@res> appropriately on the current filehandle.  If C<$ISEVAL>
 is true, use terse format.  Otherwise, use human-readable format,
@@ -696,6 +751,21 @@ which can use either L<Data::Dumper>, L<YAML>, or L<Data::Dump>.
         } else {
             Data::Dump::dump(\@res);
         }
+    },
+    peek => sub {
+        eval {
+            require Devel::Peek;
+            require IO::Scalar;
+        };
+        if ($@) {
+            $PRINTER{dumper}->();
+        } else {
+            my $ret = new IO::Scalar;
+            my $out = select $ret;
+            Devel::Peek::Dump(@res == 1 ? $res[0] : \@res);
+            select $out;
+            $ret;
+        }
     }
 );
 
@@ -734,8 +804,13 @@ BEGIN {
     $PRINT_PRETTY = 1;
 }
 
+=item C<prompt()> -- Print the REPL prompt.
+
+=cut
+
 sub prompt()
 {
+    run_hook @PRE_PROMPT;
     "$PACKAGE ".($WANTARRAY ? '@' : '$').$PS1
 }
 
@@ -746,6 +821,10 @@ sub Dump
     };
 }
 
+=item C<$flowed = flow($width, $text)> -- Flow C<$text> to at most C<$width> columns.
+
+=cut
+
 sub flow
 {
     my $n = shift;
@@ -754,6 +833,24 @@ sub flow
     s/(.{$n1,$n}) /$1\n/g;
     $_
 }
+
+=back
+
+=head2 Persistence
+
+=over
+
+=item C<load \@keyvals> -- Load persisted data in C<@keyvals>.
+
+=item C<$ok = saveable $name> -- Return whether C<$name> is saveable.
+
+Saving certain magic variables leads to badness, so we avoid them.
+
+=item C<\@kvs = save $re> -- Return a list of name/value pairs to save.
+
+=back
+
+=cut
 
 sub load
 {
@@ -804,7 +901,13 @@ sub save
     \@save;
 }
 
-=head2 C<define_shortcut $name, $sub [, $doc [, $shortdoc]]>
+=head2 REPL shortcuts
+
+The function implementing built-in REPL shortcut ",X" is named C<repl_X>.
+
+=over
+
+=item C<define_shortcut $name, $sub [, $doc [, $shortdoc]]>
 
 Define $name as a shortcut for function $sub.
 
@@ -827,6 +930,12 @@ sub define_shortcut
     $REPL_DOC{$name} = $doc;
     $REPL_SHORT{$name} = $short;
 }
+
+=item C<define_shortcuts()>
+
+Define the default REPL shortcuts.
+
+=cut
 
 sub define_shortcuts
 {
@@ -863,7 +972,7 @@ sub define_shortcuts
         'size PKG [RE]',
             'List total sizes of objects in PKG matching optional pattern RE.';
     define_shortcut define => \&Sepia::repl_define,
-        'define NAME [\'doc\'] BODY',
+        'define NAME [\'DOC\'] BODY',
             'Define NAME as a shortcut executing BODY';
     define_shortcut undef => \&Sepia::repl_undef,
         'undef NAME', 'Undefine shortcut NAME';
@@ -877,6 +986,141 @@ sub define_shortcuts
         'reload [MODULE | /RE/]', 'Reload MODULE, or all modules matching RE.';
     define_shortcut freload => \&Sepia::repl_full_reload,
         'freload MODULE', 'Reload MODULE and all its dependencies.';
+    define_shortcut time => \&Sepia::repl_time,
+        'time [0|1]', 'Print timing information for each command.';
+}
+
+=item C<repl_strict([$value])>
+
+Toggle strict mode.  Requires L<Lexical::Persistence>.
+
+=cut
+
+sub repl_strict
+{
+    eval { require Lexical::Persistence; import Lexical::Persistence };
+    if ($@) {
+        print "Strict mode requires Lexical::Persistence.\n";
+    } else {
+        *repl_strict = sub {
+            my $x = as_boolean(shift, $STRICT);
+            if ($x && !$STRICT) {
+                $STRICT = new Lexical::Persistence;
+            } elsif (!$x) {
+                undef $STRICT;
+            }
+        };
+        goto &repl_strict;
+    }
+}
+
+sub repl_size
+{
+    eval { require Devel::Size };
+    if ($@) {
+        print "Size requires Devel::Size.\n";
+    } else {
+        *Sepia::repl_size = sub {
+            no strict 'refs';
+            ## XXX: C&P from repl_who:
+            my ($pkg, $re) = split ' ', shift || '';
+            if ($pkg =~ /^\/(.*)\/?$/) {
+                $pkg = $PACKAGE;
+                $re = $1;
+            } elsif (!$pkg) {
+                $pkg = 'main';
+                $re = '.';
+            } elsif (!$re && !%{$pkg.'::'}) {
+                $re = $pkg;
+                $pkg = $PACKAGE;
+            }
+            my @who = who($pkg, $re);
+            my $len = max(3, map { length } @who) + 4;
+            my $fmt = '%-'.$len."s%10d\n";
+            # print "$pkg\::/$re/\n";
+            print 'Var', ' ' x ($len + 2), "Bytes\n";
+            print '-' x ($len-4), ' ' x 9, '-' x 5, "\n";
+            my %res;
+            for (@who) {
+                next unless /^[\$\@\%\&]/; # skip subs.
+                next if $_ eq '%SIG';
+                $res{$_} = eval "no strict; package $pkg; Devel::Size::total_size \\$_;";
+            }
+            for (sort { $res{$b} <=> $res{$a} } keys %res) {
+                printf $fmt, $_, $res{$_};
+            }
+        };
+        goto &repl_size;
+    }
+}
+
+=item C<repl_time([$value])>
+
+Toggle command timing.
+
+=cut
+
+my ($time_res, $TIME);
+sub time_pre_prompt_bsd
+{
+    printf "(%.2gr, %.2gu, %.2gs) ", @{$time_res} if defined $time_res;
+};
+
+sub time_pre_prompt_plain
+{
+    printf "(%.2gs) ", $time_res if defined $time_res;
+}
+
+sub repl_time
+{
+    $TIME = as_boolean(shift, $TIME);
+    if (!$TIME) {
+        print STDERR "Removing time hook.\n";
+        remove_hook @PRE_PROMPT, 'Sepia::time_pre_prompt';
+        remove_hook @PRE_EVAL, 'Sepia::time_pre_eval';
+        remove_hook @POST_EVAL, 'Sepia::time_post_eval';
+        return;
+    }
+    print STDERR "Adding time hook.\n";
+    add_hook @PRE_PROMPT, 'Sepia::time_pre_prompt';
+    add_hook @PRE_EVAL, 'Sepia::time_pre_eval';
+    add_hook @POST_EVAL, 'Sepia::time_post_eval';
+    my $has_bsd = eval { use BSD::Resource 'getrusage';1 };
+    my $has_hires = eval { use Time::HiRes qw(gettimeofday tv_interval);1 };
+    my ($t0);
+    if ($has_bsd) {                    # sweet!  getrusage!
+        my ($user, $sys, $real);
+        *time_pre_eval = sub {
+            undef $time_res;
+            ($user, $sys) = getrusage;
+            $real = $has_hires ? [gettimeofday] : $user+$sys;
+        };
+        *time_post_eval = sub {
+            my ($u2, $s2) = getrusage;
+            $time_res = [$has_hires ? (tv_interval $real, [gettimeofday])
+                             : $s2 + $u2 - $real,
+                         ($u2 - $user), ($s2 - $sys)];
+        };
+        *time_pre_prompt = *time_pre_prompt_bsd;
+    } elsif ($has_hires) {      # at least we have msec...
+        *time_pre_eval = sub {
+            undef $time_res;
+            $t0 = [gettimeofday];
+        };
+        *time_post_eval = sub {
+            $time_res = tv_interval($t0, [gettimeofday]);
+        };
+        *time_pre_prompt = *time_pre_prompt_plain;
+    } else {
+        *time_pre_eval = sub {
+            undef $time_res;
+            $t0 = time;
+        };
+        *time_post_eval = sub {
+            $time_res = (time - $t0);
+        };
+        *time_pre_prompt = *time_pre_prompt_plain;
+    }
 }
 
 sub repl_help
@@ -979,6 +1223,13 @@ sub repl_pwd
     print Cwd::getcwd(), "\n";
 }
 
+=item C<who($package [, $re])>
+
+List variables and functions in C<$package> matching C<$re>, or all
+variables if C<$re> is absent.
+
+=cut
+
 sub who
 {
     my ($pack, $re_str) = @_;
@@ -1008,6 +1259,12 @@ sub who
     }
 }
 
+=item C<$text = columnate(@items)>
+
+Format C<@items> in columns such that they fit within C<$ENV{COLUMNS}>
+columns.
+
+=cut
 
 sub columnate
 {
@@ -1042,6 +1299,13 @@ sub repl_who
     }
     print columnate who($pkg || $PACKAGE, $re);
 }
+
+=item C<@m = methods($package [, $qualified])>
+
+List method names in C<$package> and its parents.  If C<$qualified>,
+return full "CLASS::NAME" rather than just "NAME."
+
+=cut
 
 sub methods
 {
@@ -1098,6 +1362,7 @@ sub repl_package
 
 sub repl_quit
 {
+    $REPL_QUIT = 1;
     last repl;
 }
 
@@ -1156,14 +1421,19 @@ sub repl_test
             push @files, $buf;
         } elsif (-f "t/$buf") {
             push @files, $buf;
-        } else {
-            return;
         }
     } else {
         find({ no_chdir => 1,
                wanted => sub {
                    push @files, $_ if /\.t$/;
             }}, Cwd::getcwd() =~ /t\/?$/ ? '.' : './t');
+    }
+    if (@files) {
+        # XXX: this is cribbed from an EU::MM-generated Makefile.
+        system $^X, qw(-MExtUtils::Command::MM -e),
+            "test_harness(0, 'blib/lib', 'blib/arch')", @files;
+     } else {
+        print "No test files for '$buf' in ", Cwd::getcwd, "\n";
     }
 }
 
@@ -1236,7 +1506,16 @@ sub repl_reload
     }
 }
 
-## Collects warnings for REPL
+=item C<sig_warn($warning)>
+
+Collect C<$warning> for later printing.
+
+=item C<print_warnings()>
+
+Print and clear accumulated warnings.
+
+=cut
+
 my @warn;
 
 sub sig_warn
@@ -1268,7 +1547,7 @@ Type ",h" for help, or ",q" to quit.
 EOS
 }
 
-=head2 C<repl()>
+=item C<repl()>
 
 Execute a command interpreter on standard input and standard output.
 If you want to use different descriptors, localize them before
@@ -1315,9 +1594,11 @@ If zero, then initialization takes place.
 
 =back
 
+=back
+
 =cut
 
-sub repl
+sub repl_setup
 {
     $| = 1;
     if ($REPL_LEVEL == 0) {
@@ -1325,6 +1606,14 @@ sub repl
         -f "$ENV{HOME}/.sepiarc" and do "$ENV{HOME}/.sepiarc";
         warn ".sepiarc: $@\n" if $@;
     }
+    Sepia::Debug::add_repl_commands;
+    repl_banner if $REPL_LEVEL == 0;
+    print prompt;
+}
+
+sub repl
+{
+    repl_setup;
     local $REPL_LEVEL = $REPL_LEVEL + 1;
 
     my $in;
@@ -1337,9 +1626,6 @@ sub repl
     local *CORE::GLOBAL::die = \&Sepia::Debug::die;
     local *CORE::GLOBAL::warn = \&Sepia::Debug::warn;
     local @REPL_RESULT;
-    Sepia::Debug::add_repl_commands;
-    repl_banner if $REPL_LEVEL == 1;
-    print prompt;
     my @sigs = qw(INT TERM PIPE ALRM);
     local @SIG{@sigs};
     $SIG{$_} = $nextrepl for @sigs;
@@ -1399,7 +1685,9 @@ sub repl
                 }
             } else {
                 ## Ordinary eval
+                run_hook @PRE_EVAL;
                 @res = $REPL{eval}->($buf);
+                run_hook @POST_EVAL;
                 if ($@) {
                     if ($ISEVAL) {
                         ## Always return results for an eval request
@@ -1440,6 +1728,7 @@ sub repl
             print_warnings;
             print prompt;
         }
+    exit if $REPL_QUIT;
     wantarray ? @REPL_RESULT : $REPL_RESULT[0]
 }
 
@@ -1448,18 +1737,24 @@ sub perl_eval
     tolisp($REPL{eval}->(shift));
 }
 
-=head2 C<$status = html_module_list([$file [, $prefix]])>
+=head2 Module browsing
+
+=over
+
+=item C<$status = html_module_list([$file [, $prefix]])>
 
 Generate an HTML list of installed modules, looking inside of
 packages.  If C<$prefix> is missing, uses "about://perldoc/".  If
 $file is given, write the result to $file; otherwise, return it as a
 string.
 
-=head2 C<$status = html_package_list([$file [, $prefix]])>
+=item C<$status = html_package_list([$file [, $prefix]])>
 
 Generate an HTML list of installed top-level modules, without looking
 inside of packages.  If C<$prefix> is missing, uses
 "about://perldoc/".  $file is the same as for C<html_module_list>.
+
+=back
 
 =cut
 

@@ -40,7 +40,6 @@ run on other versions of Emacs, but may require additional packages.
     ja-nkf-2.05
 
 * TODO
-** (Medium) implement mod_apropos
 ** (Easy) Use module, file, line to refine queries (Perl side)
 ** (Medium) Get the variable def/use analysis working again.
 ** (Hard) Use module, file, line to filter results (Emacs side)
@@ -53,8 +52,6 @@ run on other versions of Emacs, but may require additional packages.
 
    This can be done with a clever DB::sub, but that dramatically slows
    down execution.
-** (Easy) Fix sepia-indent-or-complete abbrev expansion
-   Currently "else<TAB>" both expands and completes.
 ** (Medium) fix `sepia-beginning-of-defun' and `sepia-end-of-defun'.
    While they work for "normal" sub definitions, they fail on
    definitions that are all on one line, e.g.
@@ -82,6 +79,9 @@ run on other versions of Emacs, but may require additional packages.
    codebases (Sepia's and complete.el's), I know there are always a
    lot of subtle cases to get right, and what acts "naturally" by
    human standards is extremely complicated to specify in code.
+** (Hard) Add appropriate hooks
+   Possibly update existing functions to make use of hooks for better
+   modularity.
 * KNOWN BUGS
 The following is a list of bugs that are difficult to automatically
 reproduce, with the dates they were first observed.
