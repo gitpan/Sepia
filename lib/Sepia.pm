@@ -33,7 +33,7 @@ interface.
 
 =cut
 
-$VERSION = '0.991_03';
+$VERSION = '0.991_04';
 BEGIN {
     # a less annoying version of strict and warnings
     if (!eval 'use common::sense;1') {

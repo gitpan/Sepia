@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Sepia
-version:            0.991_03
+version:            0.991_04
 abstract:           Simple Emacs-Perl InterAction
 author:
     - Sean O'Rourke <seano@cpan.org>
