@@ -4,7 +4,7 @@
 ;; Author: Sean O'Rourke <seano@cpan.org>
 ;; Keywords: Perl, languages
 
-;; Copyright (C) 2004-2009 Sean O'Rourke.  All rights reserved, some
+;; Copyright (C) 2004-2010 Sean O'Rourke.  All rights reserved, some
 ;;   wrongs reversed.  This code is distributed under the same terms
 ;;   as Perl itself.
 
@@ -50,7 +50,7 @@ Useful values include `sepia-w3m-view-pod' and `sepia-perldoc-buffer'.")
   (if (featurep 'w3m) 'w3m-find-file 'browse-url-of-file)
 "* Function to view a list of installed modules.
 
-Useful values include `w3m-find-file' and `browse-url-of-buffer'.")
+Useful values include `w3m-find-file' and `browse-url-of-file'.")
 
 (defvar sepia-complete-methods t
 "* Non-nil if Sepia should try to complete methods for \"$x->\".
@@ -83,7 +83,7 @@ subs from the evaluation package, it may not always work.")
 "The perl process with which we're interacting.")
 (defvar sepia-output nil
 "Current perl output for a response to `sepia-eval-raw', appended
-to by `perl-collect-output'.")
+to by `sepia-collect-output'.")
 (defvar sepia-passive-output ""
 "Current perl output for miscellaneous user interaction, used to
 look for \";;;###\" lisp evaluation markers.")
@@ -223,7 +223,8 @@ might want to bind your keys, which works best when bound to
     (define-key map "\C-c\C-l" 'sepia-load-file)
     (define-key map "\C-c\C-p" 'sepia-view-pod) ;was cperl-pod-spell
     (define-key map "\C-c\C-d" 'cperl-perldoc)
-    (define-key map "\C-c\C-r" 'sepia-repl)
+    (define-key map "\C-c\C-t" 'sepia-repl)
+    (define-key map "\C-c\C-r" 'sepia-eval-region)
     (define-key map "\C-c\C-s" 'sepia-scratch)
     (define-key map "\C-c\C-e" 'sepia-eval-expression)
     (define-key map "\C-c!" 'sepia-set-cwd)
@@ -232,12 +233,18 @@ might want to bind your keys, which works best when bound to
   "Sepia bindings common to all modes.")
 
 ;;;###autoload
+(defun sepia-eval-region (beg end)
+  (interactive "r")
+  (sepia-eval (buffer-substring beg end)))
+
+;;;###autoload
 (defun sepia-perldoc-this (name)
   "View perldoc for module at point."
   (interactive (list (sepia-interactive-arg 'module)))
   (let ((wc (current-window-configuration))
         (old-pd (symbol-function 'w3m-about-perldoc))
-        (old-pdb (symbol-function 'w3m-about-perldoc-buffer)))
+        (old-pdb (symbol-function 'w3m-about-perldoc-buffer))
+        buf)
     (condition-case stuff
         (flet ((w3m-about-perldoc (&rest args)
                  (let ((res (apply old-pd args)))
@@ -245,8 +252,11 @@ might want to bind your keys, which works best when bound to
                (w3m-about-perldoc-buffer (&rest args)
                  (let ((res (apply old-pdb args)))
                    (or res (error "lose: %s" args)))))
-          (funcall (if (featurep 'w3m) 'w3m-perldoc 'cperl-perldoc) name))
-      (error (set-window-configuration wc)))))
+          (funcall (if (featurep 'w3m) 'w3m-perldoc 'cperl-perldoc) name)
+          (setq buf (current-buffer)))
+      (error (set-window-configuration wc)))
+    (set-window-configuration wc)
+    (pop-to-buffer buf t)))
 
 (defun sepia-view-pod ()
   "View POD for the current buffer."
@@ -507,44 +517,52 @@ symbol at point."
 
 (defvar sepia-found-refiner)
 
-(defun sepia-show-locations (locs)
-  (when locs
-    (pop-to-buffer (get-buffer-create "*sepia-places*"))
-    (let ((inhibit-read-only t))
-      (erase-buffer)
-      (dolist (loc (sort (remove nil locs) ; XXX where's nil from?
-                         (lambda (a b)
-                           (or (string< (car a) (car b))
-                               (and (string= (car a) (car b))
-                                    (< (second a) (second b)))))))
-        (destructuring-bind (file line name &rest blah) loc
-          (let ((str (ifa (find-buffer-visiting file)
-                          (with-current-buffer it
-                            (ifa sepia-found-refiner
-                                 (funcall it line name)
-                                 (goto-line line))
-                            (message "line for %s was %d, now %d" name line
-                                     (line-number-at-pos))
-                            (setq line (line-number-at-pos))
-                            (let ((tmpstr
-                                   (buffer-substring (sepia-bol-from (point))
-                                                     (sepia-eol-from (point)))))
-                              (if (> (length tmpstr) 60)
-                                  (concat "\n    " tmpstr)
-                                  tmpstr)))
-                          "...")))
-            (insert (format "%s:%d:%s\n" (abbreviate-file-name file) line str)))))
-      (grep-mode)
-      (goto-char (point-min)))))
+(defun sepia-show-locations (locs &optional unobtrusive)
+  (setq locs (remove nil locs)) ; XXX where's nil from?
+  (if locs
+      (with-current-buffer (get-buffer-create "*sepia-places*")
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert (format "-*- mode: grep; default-directory: %S -*-\n\n"
+                          default-directory))
+          (dolist (loc (sort locs
+                             (lambda (a b)
+                               (or (string< (car a) (car b))
+                                   (and (string= (car a) (car b))
+                                        (< (second a) (second b)))))))
+            (destructuring-bind (file line name &rest blah) loc
+              (let ((str (ifa (find-buffer-visiting file)
+                              (with-current-buffer it
+                                (ifa sepia-found-refiner
+                                     (funcall it line name)
+                                     (goto-line line))
+                                (unless (= (line-number-at-pos) line)
+                                  (message "line for %s was %d, now %d" name line
+                                           (line-number-at-pos)))
+                                (setq line (line-number-at-pos))
+                                (let ((tmpstr
+                                       (buffer-substring (sepia-bol-from (point))
+                                                         (sepia-eol-from (point)))))
+                                  (if (> (length tmpstr) 60)
+                                      (concat "\n    " tmpstr)
+                                    tmpstr)))
+                              "...")))
+                (insert (format "%s:%d:%s\n" (abbreviate-file-name file) line str)))))
+          (insert "\nGrep finished (matches found).\n")
+          (grep-mode))
+        (if unobtrusive
+            (save-window-excursion (next-error nil t))
+          (next-error nil t)))
+    (message "No matches found.")))
 
 (defmacro define-sepia-query (name doc &optional gen test prompt)
   "Define a sepia querying function."
   `(defun ,name (ident &optional module file line display-p)
      ,(concat doc "
 
-With prefix arg, list occurences in a `grep-mode' buffer.
-Without, place the occurrences on `sepia-found', so that
-calling `sepia-next' will cycle through them.
+With prefix arg, display matches in a `grep-mode' buffer.
+Without, go to the first match; calling `sepia-next' will cycle
+through subsequent matches.
 
 Depending on the query, MODULE, FILE, and LINE may be used to
 narrow the results, as long as doing so leaves some matches.
@@ -562,13 +580,7 @@ buffer.
 		 `(let ((tmp (,gen ident module file line)))
 		    (or (mapcan #',test tmp) tmp))
                  `(,gen ident module file line))))
-       ;; Always clear out the last found ring, because it's confusing
-       ;; otherwise.
-       (sepia-set-found nil ,(or prompt ''function))
-       (if display-p
-           (sepia-show-locations ret)
-           (sepia-set-found ret ,(or prompt ''function))
-           (sepia-next)))))
+       (sepia-show-locations ret (not display-p)))))
 
 (define-sepia-query sepia-defs
     "Find all definitions of sub."
@@ -646,7 +658,6 @@ to this location."
 "
     (interactive "P")
     (multiple-value-bind (type obj) (sepia-ident-at-point)
-      (sepia-set-found nil type)
       (let* ((module-doc-p nil)
              (ret
               (cond
@@ -661,10 +672,7 @@ to this location."
                 (t (setq module-doc-p t)
                    (call-interactively 'sepia-defs)))))
         (unless module-doc-p
-          (if display-p
-              (sepia-show-locations ret)
-              (sepia-set-found ret type)
-              (sepia-next))))))
+          (sepia-show-locations ret (not display-p))))))
 
 (defun sepia-rebuild ()
   "Rebuild the Xref database."
@@ -861,63 +869,10 @@ also rebuild the xref database."
 (defun sepia-next (&optional arg)
   "Go to the next thing (e.g. def, use) found by sepia."
   (interactive "p")
-  (or arg (setq arg 1))
-  (if (cdr sepia-found)
-      (let ((i (car sepia-found))
-            (list (cdr sepia-found))
-            (len (length (cdr sepia-found)))
-            (next (+ (car sepia-found) arg))
-            (prompt ""))
-        (if (and (= len 1) (>= i 0))
-            (message "No more definitions.")
-          ;; if stepwise found next or previous item, it can cycle
-          ;; around the `sepia-found'. When at first or last item, get
-          ;; a warning
-          (if (= (abs arg) 1)
-              (progn
-                (setq i next)
-                (if (< i 0)
-                    (setq i (1- len))
-                  (if (>= i len)
-                      (setq i 0)))
-                (if (= i (1- len))
-                    (setq prompt "Last one! ")
-                  (if (= i 0)
-                      (setq prompt "First one! "))))
-            ;; if we skip several item, when arrive the first or last
-            ;; item, we will stop at the one. But if we already at last
-            ;; item, then keep going
-            (if (< next 0)
-                (if (= i 0)
-                    (setq i (mod next len))
-                  (setq i 0
-                        prompt "First one!"))
-              (if (> next len)
-                  (if (= i (1- len))
-                      (setq i (mod next len))
-                    (setq i (1- len)
-                          prompt "Last one!")))))
-          (setcar sepia-found i)
-          (setq next (nth i list))
-          (let ((file (car next))
-                (line (cadr next))
-                (short (nth 2 next))
-                (mod (nth 3 next)))
-        (unless file
-          (setq file (and mod (sepia-find-module-file mod)))
-          (if file
-                  (setcar next file)
-                (error "No file for %s." (car next))))
-            (message "%s at %s:%s. %s" short file line prompt)
-        (when (file-exists-p file)
-          (find-file (or file (sepia-find-module-file mod)))
-          (when sepia-found-refiner
-            (funcall sepia-found-refiner line short))
-          (beginning-of-line)
-              (recenter)))))
-      (message "No more definitions.")))
+  (save-window-excursion (next-error arg)))
 
 (defun sepia-previous (&optional arg)
+  "Go to the previous thing (e.g. def, use) found by sepia."
   (interactive "p")
   (or arg (setq arg 1))
   (sepia-next (- arg)))
@@ -1461,8 +1416,14 @@ When called interactively, the current buffer's
 (defvar sepia-doc-map (make-hash-table :test #'equal))
 (defvar sepia-var-doc-map (make-hash-table :test #'equal))
 (defvar sepia-module-doc-map (make-hash-table :test #'equal))
+(defvar sepia-skip-doc-scan nil)
 
 (defun sepia-doc-scan-buffer ()
+  ;; too many confusing things in perldiag, so just give up.
+  (when (or sepia-skip-doc-scan
+            (and (buffer-file-name)
+                 (string-match "perldiag\\.pod$" (buffer-file-name))))
+    (return nil))
   (save-excursion
     (goto-char (point-min))
     (loop
@@ -1500,12 +1461,12 @@ When called interactively, the current buffer's
                        (or (and (equal short (match-string 1 short)) longdoc)
                            short)))
                 ;; e.g. "C<foo(BLAH)>" or "$x = $y->foo()"
-                ((string-match "\\([A-Za-z0-9_:]+\\)\\s *\\(\\$\\|(\\)" short)
+                ((string-match "^\\([A-Za-z0-9_:]+\\)\\s *\\(\\$\\|(\\)" short)
                  (list 'function (match-string-no-properties 1 short)
                        (or (and (equal short (match-string 1 short)) longdoc)
                            short)))
                 ;; e.g. "C<$result = foo $args...>"
-                ((string-match "=\\s *\\([A-Za-z0-9_:]+\\)" short)
+                ((string-match "^[%@$*][A-Za-z0-9_:]+\\s *=\\s *\\([A-Za-z0-9_:]+\\)" short)
                  (list 'function (match-string-no-properties 1 short)
                        (or (and (equal short (match-string 1 short)) longdoc)
                            short)))
@@ -1524,7 +1485,10 @@ When called interactively, the current buffer's
   "Update documentation for a file.
 
 This documentation, taken from \"=item\" entries in the POD, is
-used for eldoc feedback."
+used for eldoc feedback.  Set the file variable
+`sepia-skip-doc-scan' to non-nil to skip scanning this buffer.
+This can be used to avoid generating bogus documentation from
+files like perldiag.pod."
   (interactive)
   (let ((pack (ifa (sepia-buffer-package) (concat it "::") "")))
     (dolist (x (sepia-doc-scan-buffer))
@@ -1540,8 +1504,7 @@ used for eldoc feedback."
          (eval-when-compile (regexp-opt '("strict" "vars" "warnings" "lib")))
          obj)
         (and
-         (string-match "^\\([A-Z][A-Za-z0-9]*::\\)*[A-Z]+[A-Za-z0-9]+\\sw*$" obj)
-         (xref-apropos-module obj)))))
+         (string-match "^\\([A-Z][A-Za-z0-9]*::\\)*[A-Z]+[A-Za-z0-9]+\\sw*$" obj)))))
 
 (defun sepia-describe-object (thing)
   "Display documentation for `thing', like ``describe-function'' for elisp."
@@ -1616,7 +1579,10 @@ calling `cperl-describe-perl-symbol'."
       "")))
 
 (defun sepia-install-eldoc ()
-  "Install Sepia hooks for eldoc support."
+  "Install Sepia hooks for eldoc support.
+
+This automatically disables `cperl-lazy-installed', the
+`cperl-mode' reimplementation of eldoc."
   (interactive)
   (require 'eldoc)
   (set-variable 'eldoc-documentation-function 'sepia-symbol-info t)
@@ -1689,9 +1655,80 @@ calling `cperl-describe-perl-symbol'."
     (t
      (concat "{" (mapconcat #'sepia-lisp-to-perl thing ", ") "}"))))
 
+(defun sepia-find-loaded-modules ()
+  (interactive)
+  "Visit all source files loaded by the currently-running Perl.
+
+Currently, this means any value of %INC matching /.p[lm]$/."
+  (dolist (file (sepia-eval "values %INC" 'list-context))
+    (when (string-match "\\.p[lm]$" file)
+      (find-file-noselect file t))))
+
+(defun sepia-dired-package (package)
+  (interactive "sPackage: ")
+  "Browse files installed by `package'.
+
+Create a `dired-mode' buffer listing all flies installed by `package'."
+  ;; XXX group by common prefix and use /^ DIRECTORY:$/ format
+  (let ((ls (sort #'string<
+                  (sepia-call "Sepia::file_list" 'list-context package)))
+        pfx
+        maxlen)
+    (setq maxlen (apply #'max (mapcar #'length ls)))
+    (with-current-buffer (get-buffer-create (format "*Package %s*" package))
+      (let ((inhibit-read-only t)
+            marker)
+        ;; Start with a clean slate
+        (erase-buffer)
+        (setq marker (point-min-marker))
+        (set (make-local-variable 'dired-subdir-alist) nil)
+        ;; Build up the contents
+        (while ls
+          ;; Find a decent prefix
+          (setq pfx (try-completion "" ls))
+          (unless (file-exists-p pfx)
+            (string-match "^\\(.*/\\)" pfx)
+            (setq pfx (match-string 1 pfx)))
+          ;; If we found a lousy prefix, chew off the first few paths and
+          ;; try again.  XXX not done.
+          (insert (format "  %s:\n" pfx))
+          (setq default-directory pfx)
+          (apply 'call-process "/bin/ls" nil (current-buffer) t
+                 (cons "-lR" (mapcar
+                              (lambda (x)
+                                (replace-regexp-in-string
+                                 (concat pfx "?") "" x))
+                              ls)))
+          (push `((,default-directory . ,marker)) dired-subdir-alist)
+          (setq ls nil))
+        (dired-mode pfx)
+        (pop-to-buffer (current-buffer))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Fight CPerl a bit -- it can be opinionated
+
+(defadvice cperl-imenu--create-perl-index (after simplify compile activate)
+  "Make cperl's imenu index simpler."
+  (flet ((annoying (x)
+                   (dolist (y '("Rescan" "^\\+Unsorted" "^\\+Packages"))
+                     (when (string-match y (car x))
+                       (return-from annoying t)))
+                   nil))
+    (setq ad-return-value (remove-if #'annoying ad-return-value))))
+
+;; (defun sepia-view-mode-hook ()
+;;   "Let backspace scroll again.
+
+;; XXX Unused, yet."
+;;   (local-unset-key (kbd "<backspace>")))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; __DATA__
+
 (defun sepia-init-perl-builtins ()
   (setq sepia-perl-builtins (make-hash-table :test #'equal))
-  (dolist (s '("abs"
+  (dolist (s '(
+"abs"
 "accept"
 "alarm"
 "atan2"

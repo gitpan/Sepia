@@ -17,6 +17,7 @@
      ("sub" . "sub $${NAME}\n{\n$>$.\n}$>")
      ("unless" . "unless ($${TEST}) {\n$>$.\n}$>")
      ("until" . "until ($${TEST}) {\n$>$.\n}$>")
-     ("while" . "while ($${TEST}) {\n$>$.\n}$>"))))
+     ("while" . "while ($${TEST}) {\n$>$.\n}$>")
+     ("whilekv" . "while (my ($k, $v) = each $${HASH}) {\n$>$.\n}$>"))))
 
 (add-hook 'sepia-mode-hook 'sepia-snippet-abbrev)

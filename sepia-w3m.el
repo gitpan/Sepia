@@ -47,24 +47,27 @@
       ;; To specify the place in which pod2html generates its cache files.
       (setenv "HOME" (expand-file-name w3m-profile-directory))
       (insert-buffer-substring buf)
-      (when (zerop (apply #'call-process-region
-			  (point-min) (point-max)
-			  w3m-perldoc-pod2html-command
-			  t '(t nil) nil
-			  (append w3m-perldoc-pod2html-arguments
-				  '("--index" "--htmlroot=about://perldoc-buffer"))))
-	(let ((case-fold-search t))
-	  (goto-char (point-min))
-	  (while (re-search-forward
-		  "<a href=\"about://perldoc\\(-buffer\\)?/\\([^\"]*\\)\\(\\.html\\)\">" nil t)
-	    (delete-region (match-beginning 3) (match-end 3))
-	    (save-restriction
-	      (narrow-to-region (match-beginning 2) (match-end 2))
-	      (while (search-backward "/" nil t)
-		(delete-char 1)
-		(insert "::"))
-	      (goto-char (point-max))))
-	  "text/html")))))
+      (if (zerop (apply #'call-process-region
+                        (point-min) (point-max)
+                        w3m-perldoc-pod2html-command
+                        t '(t nil) nil
+                        (append w3m-perldoc-pod2html-arguments
+                                '("--index" "--htmlroot=about://perldoc-buffer"))))
+          (let ((case-fold-search t))
+            (goto-char (point-min))
+            (while (re-search-forward
+                    "<a href=\"about://perldoc\\(-buffer\\)?/\\([^\"]*\\)\\(\\.html\\)\">" nil t)
+              (delete-region (match-beginning 3) (match-end 3))
+              (save-restriction
+                (narrow-to-region (match-beginning 2) (match-end 2))
+                (while (search-backward "/" nil t)
+                  (delete-char 1)
+                  (insert "::"))
+                (goto-char (point-max))))
+            "text/html")
+        ;; something went wrong
+        (message "POD errors in %s" buf)
+        (display-buffer (current-buffer))))))
 
 ;;;###autoload
 (defun sepia-w3m-view-pod (&optional buffer)

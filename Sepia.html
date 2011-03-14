@@ -6,6 +6,10 @@
 <meta name="generator" content="makeinfo 4.8">
 <link title="Top" rel="top" href="#Top">
 <link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
+<!--
+Copyright (C) 2005-2010 Sean O'Rourke.  All rights reserved,
+some wrongs reversed.  This module is distributed under the same terms
+as Perl.-->
 <meta http-equiv="Content-Style-Type" content="text/css">
 <style type="text/css"><!--
   pre.display { font-family:inherit }
@@ -77,10 +81,9 @@ class and file trees.  Rather than supporting interactive evaluation of
 small pieces of code, they perform background semantic checking on whole
 projects and highlight errors.  Rather than allowing minor
 customizations to grow organically into features, they support limited
-configuration files and baroque plug-in APIs.  Sepia tries to adhere to
-the apparent Emacs philosophy that rich semantic information should be
-unobtrusive, and that the best way to build working code is to start
-by experimenting with small pieces.
+configuration files and baroque plug-in APIs<a rel="footnote" href="#fn-1" name="fnd-1"><sup>1</sup></a>.  Sepia tries to adhere to the apparent Emacs philosophy that
+rich semantic information should be unobtrusive, and that the best way
+to build working code is to start by experimenting with small pieces.
 
    <p>Language support packages for Emacs vary widely in the degree to which
 they make use of or replace existing Emacs features.  Minimal modes
@@ -346,8 +349,16 @@ extensions.  To start or switch to the repl, type <kbd>M-x sepia-repl</kbd>.
 As in Sepia mode, &lt;TAB&gt; in the REPL performs partial-word completion
 with <code>sepia-complete-symbol</code>.
 
-   <p>Sepia also provides a number of other ways to evaluate pieces of code in
+<!-- == REPL behavior == -->
+<!--  $_/@_ -->
+<!--  RET & eval/newline -->
+<!--  eval context -->
+<p>Sepia also provides a number of other ways to evaluate pieces of code in
 Perl, and commands to process buffer text using the inferior process.
+
+   <p>Finally, Sepia comes with the <kbd>sepl</kbd> program, a standalone REPL that
+can be run from the command-line, and provides many features of the
+Emacs-based REPL.
 
 <p><a name="Shortcuts"></a>
 
@@ -374,7 +385,12 @@ passed the raw command-line text as its first argument.
 
      <br><dt><kbd>format </kbd><var>type</var><dd>Set the output format to <var>type</var>, either &ldquo;dumper&rdquo; (using
 <code>Data::Dumper</code>), &ldquo;dump&rdquo; (<code>Data::Dump</code>), &ldquo;yaml&rdquo;
-(<code>YAML</code>), or &ldquo;plain&rdquo; (stringification).  Default: &ldquo;dumper&rdquo;.
+(<code>YAML</code>), &ldquo;peek&rdquo; (<code>Devel::Peek</code>), &ldquo;dumpvar&rdquo;
+(<code>dumpvar.pl</code>, somewhat rough), or &ldquo;plain&rdquo; (stringification). 
+Default: &ldquo;dumper&rdquo;.
+
+     <p>Note that this setting is independent of <code>$COLUMNATE</code> and
+<code>$STRINGIFY</code>.
 
      <br><dt><kbd>help</kbd><dd>Display a list of shortcuts.
 
@@ -382,6 +398,8 @@ passed the raw command-line text as its first argument.
 created by <kbd>save</kbd>.
 
      <br><dt><kbd>lsbreak</kbd><dd>List breakpoints.
+
+     <br><dt><kbd>lsmod [</kbd><var>pattern</var><kbd>]</kbd><dd>List currently-loaded modules matching optional <var>pattern</var>.
 
      <br><dt><kbd>methods </kbd><var>name</var><kbd> [</kbd><var>regexp</var><kbd>]</kbd><dd>Display a list of functions defined in package <var>name</var> and its
 <code>ISA</code>-ancestors matching optional pattern <var>regexp</var>.
@@ -428,8 +446,8 @@ previous command as part of the prompt.
      <br><dt><kbd>undef </kbd><var>name</var><dd>Undefine shortcut <var>name</var>.  <strong>Warning</strong>: this can equally be
 used to remove built-in shortcuts.
 
-     <br><dt><kbd>wantarray [</kbd><var>val</var><kbd>]</kbd><dd>Set the evaluation context to <var>val</var>, or toggle between scalar and
-array context.
+     <br><dt><kbd>wantarray [</kbd><var>val</var><kbd>]</kbd><dd>Set the evaluation context to <var>val</var>: <code>@</code> means array, <code>$</code>
+means scalar, and anything else means void.
 
      <br><dt><kbd>who </kbd><var>package</var><kbd> [</kbd><var>regexp</var><kbd>]</kbd><dt><kbd>who [</kbd><var>regexp</var><kbd>]</kbd><dd>List identifiers in <var>package</var> (main by default) matching
 optional <var>regexp</var>.
@@ -565,9 +583,9 @@ well tested.
 <p>While Sepia can be customized in both the Perl and Emacs Lisp, most of
 the user-accessible configuration is in the latter.
 
-<p><a name="Emacs-Variables"></a>
+<p><a name="Emacs-Customization"></a>
 
-<h3 class="section">5.1 Emacs Variables</h3>
+<h3 class="section">5.1 Emacs Customization</h3>
 
 <p>Since Sepia tries where possible to reuse existing Emacs functionality,
 its behavior should already be covered by existing customizations.  The
@@ -618,12 +636,13 @@ Default: <code>sepia-w3m-view-pod</code> if Emacs-w3m is available, or
 
    </dl>
 
-<p><a name="Perl-Variables"></a>
+<p><a name="Perl-Customization"></a>
 
-<h3 class="section">5.2 Perl Variables</h3>
+<h3 class="section">5.2 Perl Customization</h3>
 
-<p>When Sepia starts up, it evaluates the Perl script in <samp><span class="file">~/.sepiarc</span></samp>. 
-The following variables in the Sepia package control various aspects of
+<p>When Sepia starts up, it evaluates the Perl script in <samp><span class="file">~/.sepiarc</span></samp>.
+
+   <p>The following variables in the Sepia package control various aspects of
 interactive evaluation.
 
      <dl>
@@ -633,9 +652,11 @@ when code is evaluated from a buffer.  Default: <code>main</code>.
      <br><dt><code>$PRINTER</code><dd>The function called to format interactive output, normally set with the
 <code>printer</code> shortcut.
 
-     <br><dt><code>$PRINT_PRETTY</code><dd>If true, format some values nicely independent of the value of
-<code>$PRINTER</code>.  Currently, this means columnating lists of simple
-scalars.  Default: true.
+     <br><dt><code>$COLUMNATE</code><dd>If true, columnate simple arrays independent of the value of
+<code>$PRINTER</code>.  Default: true.
+
+     <br><dt><code>$STRINGIFY</code><dd>If true, stringify objects that overload the operation independent of
+the value of <code>$PRINTER</code>.  Default: true.
 
      <br><dt><code>$PS1</code><dd>The trailing end of the prompt string, which should end with &ldquo;&gt; &rdquo;. 
 Default: <code>"&gt; "</code>.
@@ -646,18 +667,32 @@ debugger.  Default: true.
      <br><dt><code>$STOPWARN</code><dd>If true, calls to <code>warn</code> from interactive code will invoke the
 Sepia debugger.  Default: false.
 
-     <br><dt><code>$WANTARRAY</code><dd>If true, evaluate interactive expressions in list context.  Default: true.
+     <br><dt><code>$WANTARRAY</code><dd>If <code>@</code>, evaluate interactive expressions in list context, if
+<code>$</code>, scalar, otherwise, void.  Default: <code>@</code>.
 
    </dl>
 
-   <p>Additional REPL shortcuts can be defined with
-<kbd>Sepia::define_shortcut</kbd>.  For example
+   <p>Additional REPL shortcuts can be defined as follows:
 
-<pre class="example">     Sepia::define_shortcut time =&gt; sub { print scalar localtime, "\n" },
-         'time', 'Display the current time.';
-</pre>
-   <p>defines a shortcut &ldquo;time&rdquo; that displays the current time.  For
-details, see the code in <samp><span class="file">Sepia.pm</span></samp>.
+     <dl>
+<dt><code>Sepia::define_shortcut </code><var>name</var><code>, </code><var>function</var><code> [, </code><var>shortdoc</var><code> [, </code><var>longdoc</var><code>]]</code><dd>
+Define a shortcut <var>name</var> to call <var>function</var>.  Also define a
+short usage message <var>shortdoc</var> and documentation <var>longdoc</var>.  For
+example,
+
+     <pre class="example">          
+          Sepia::define_shortcut time =&gt; sub { print scalar localtime, "\n" },
+              'time', 'Display the current time.';
+          
+     </pre>
+     <p>defines a shortcut &ldquo;time&rdquo; that displays the current time.  For more
+examples, see the function <var>define_shortcuts</var> code in
+<samp><span class="file">Sepia.pm</span></samp>.
+
+     <br><dt><code>Sepia::alias_shortcut </code><var>new</var><code>, </code><var>old</var><dd>
+Make <var>new</var> an alias for <var>old</var>.
+
+   </dl>
 
 <!-- ============================================================ -->
 <p><a name="Internals"></a>
@@ -668,6 +703,29 @@ details, see the code in <samp><span class="file">Sepia.pm</span></samp>.
 details mentioned above should probably be given less prominence.  For
 developer documentation, please see the POD for <code>Sepia</code> and
 <code>Sepia::Xref</code>, and the doc-strings in <samp><span class="file">sepia.el</span></samp>.
+
+<p><a name="FAQ"></a>
+
+<h2 class="chapter">7 FAQ</h2>
+
+     <dl>
+<dt>Can I use <code>Sepia</code> outside of Emacs?<dd>Sepia comes with the <samp><span class="file">sepl</span></samp> program, a command-line REPL using the
+<code>Sepia::Readline</code> module, that provides many features of the
+Emacs-based REPL.  It could be improved, though &ndash; patches welcome!
+
+     <br><dt>Why is the documentation in TeXInfo format?!<dd>TeXInfo is the worst form of documentation, except for all the others. 
+TeX and LaTeX produce beautiful printed output, and Info is the best way
+to view documentation in Emacs for things that are not themselves part
+of Emacs (i.e. &ldquo;can have docstrings&rdquo;).
+
+     <p>It's awful to edit, being both verbose and redundant &ndash; just look at
+AUCTeX's <code>texinfo-every-node-update</code> for desperate placation of the
+suck, then try to figure out what's wrong when <samp><span class="file">makeinfo</span></samp> complains
+about <code>texinfo-every-node-update</code>'s output &ndash; but it's what we
+have.  At least it sucks less than <code>DocBook</code>, raw HTML, or
+<samp><span class="file">troff</span></samp>.
+
+</dl>
 
 <p><a name="Credits"></a>
 
@@ -728,22 +786,32 @@ B::Xref, all of which are Free software.
 <li><a href="#index-sepia_002dvar_002ddefs-14"><code>sepia-var-defs</code></a>: <a href="#Navigation">Navigation</a></li>
 <li><a href="#index-sepia_002dvar_002duses-13"><code>sepia-var-uses</code></a>: <a href="#Navigation">Navigation</a></li>
 <li><a href="#index-sepia_002dview_002dpod-18"><code>sepia-view-pod</code></a>: <a href="#Documentation">Documentation</a></li>
-</ul><p><a name="Variable-Index"></a>
+   </ul><p><a name="Variable-Index"></a>
 
 <h2 class="unnumbered">Variable Index</h2>
 
 
 
 <ul class="index-vr" compact>
-<li><a href="#index-sepia_002dcomplete_002dmethods-38"><code>sepia-complete-methods</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002deval_002ddefun_002dinclude_002ddecls-39"><code>sepia-eval-defun-include-decls</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002dindent_002dexpand_002dabbrev-40"><code>sepia-indent-expand-abbrev</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002dmodule_002dlist_002dfunction-41"><code>sepia-module-list-function</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002dperl5lib-43"><code>sepia-perl5lib</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002dperldoc_002dfunction-42"><code>sepia-perldoc-function</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002dprefix_002dkey-44"><code>sepia-prefix-key</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002dprogram_002dname-45"><code>sepia-program-name</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002duse_002dcompletion-46"><code>sepia-use-completion</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-<li><a href="#index-sepia_002dview_002dpod_002dfunction-47"><code>sepia-view-pod-function</code></a>: <a href="#Emacs-Variables">Emacs Variables</a></li>
-   </ul></body></html>
+<li><a href="#index-sepia_002dcomplete_002dmethods-38"><code>sepia-complete-methods</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002deval_002ddefun_002dinclude_002ddecls-39"><code>sepia-eval-defun-include-decls</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002dindent_002dexpand_002dabbrev-40"><code>sepia-indent-expand-abbrev</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002dmodule_002dlist_002dfunction-41"><code>sepia-module-list-function</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002dperl5lib-43"><code>sepia-perl5lib</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002dperldoc_002dfunction-42"><code>sepia-perldoc-function</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002dprefix_002dkey-44"><code>sepia-prefix-key</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002dprogram_002dname-45"><code>sepia-program-name</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002duse_002dcompletion-46"><code>sepia-use-completion</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+<li><a href="#index-sepia_002dview_002dpod_002dfunction-47"><code>sepia-view-pod-function</code></a>: <a href="#Emacs-Customization">Emacs Customization</a></li>
+   </ul><div class="footnote">
+<hr>
+<a name="texinfo-footnotes-in-document"></a><h4>Footnotes</h4><p class="footnote"><small>[<a name="fn-1" href="#fnd-1">1</a>]</small> In my brief
+experience with Visual Studio, I was struck by the fact that I saw
+several toolbars, a couple of navigation windows, and a tiny view of the
+actual code.  Sometimes a tooltip would obscure part of that tiny
+window.</p>
+
+   <p><hr></div>
+
+</body></html>
 

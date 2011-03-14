@@ -33,8 +33,25 @@ interface.
 
 =cut
 
-$VERSION = '0.991_02';
-use strict;
+$VERSION = '0.991_03';
+BEGIN {
+    # a less annoying version of strict and warnings
+    if (!eval 'use common::sense;1') {
+        eval 'use strict';
+    }
+    no warnings 'deprecated';       # undo some of the 5.12 suck.
+    # Not as useful as I had hoped...
+    sub track_requires
+    {
+        my $parent = caller;
+        (my $child = $_[1]) =~ s!/!::!g;
+        $child =~ s/\.pm$//;
+        push @{$REQUIRED_BY{$child}}, $parent;
+        push @{$REQUIRES{$parent}}, $child;
+    }
+    BEGIN { sub TRACK_REQUIRES () { $ENV{TRACK_REQUIRES}||0 } };
+    unshift @INC, \&Sepia::track_requires if TRACK_REQUIRES;
+}
 use B;
 use Sepia::Debug;               # THIS TURNS ON DEBUGGING INFORMATION!
 use Cwd 'abs_path';
@@ -44,9 +61,10 @@ use File::Find;
 use Storable qw(store retrieve);
 
 use vars qw($PS1 %REPL %RK %REPL_DOC %REPL_SHORT %PRINTER
-            @REPL_RESULT @res $REPL_LEVEL $REPL_QUIT $PACKAGE
-            $WANTARRAY $PRINTER $STRICT $PRINT_PRETTY $ISEVAL
-            $LAST_INPUT @PRE_EVAL @POST_EVAL @PRE_PROMPT);
+            @res $REPL_LEVEL $REPL_QUIT $PACKAGE $SIGGED
+            $WANTARRAY $PRINTER $STRICT $COLUMNATE $ISEVAL $STRINGIFY
+            $LAST_INPUT $READLINE @PRE_EVAL @POST_EVAL @PRE_PROMPT
+            %REQUIRED_BY %REQUIRES);
 
 BEGIN {
     eval q{ use List::Util 'max' };
@@ -129,15 +147,16 @@ Create a completion expression from user input.
 
 =cut
 
-sub _apropos_re($)
+sub _apropos_re($;$)
 {
     # Do that crazy multi-word identifier completion thing:
     my $re = shift;
+    my $hat = shift() ? '' : '^';
     return qr/.*/ if $re eq '';
     if (wantarray) {
         map {
             s/(?:^|(?<=[A-Za-z\d]))(([^A-Za-z\d])\2*)/[A-Za-z\\d]*$2+/g;
-            qr/^$_/
+            qr/$hat$_/;
         } split /:+/, $re, -1;
     } else {
         if ($re !~ /[^\w\d_^:]/) {
@@ -306,13 +325,14 @@ sub lexical_completions
     goto &lexical_completions;
 }
 
-=item C<@compls = completions($string [, $type])>
+=item C<@compls = completions($string [, $type [, $sub ] ])>
 
 Find a list of completions for C<$string> with glob type C<$type>,
 which may be "SCALAR", "HASH", "ARRAY", "CODE", "IO", or the special
 value "VARIABLE", which means either scalar, hash, or array.
 Completion operates on word subparts separated by [:_], so
-e.g. "S:m_w" completes to "Sepia::my_walksymtable".
+e.g. "S:m_w" completes to "Sepia::my_walksymtable".  If C<$sub> is
+given, also consider its lexical variables.
 
 =item C<@compls = method_completions($expr, $string [,$eval])>
 
@@ -490,6 +510,7 @@ sub module_info
     if ($@) {
         undef;
     } else {
+        no warnings;
         *module_info = sub {
             my ($m, $func) = @_;
             my $info;
@@ -556,17 +577,35 @@ system, grouped by distribution. XXX UNUSED
 
 =cut
 
+sub inc_re
+{
+    join '|', map quotemeta, sort { length $b <=> length $a } @INC;
+}
+
 sub module_list
 {
     @_ = package_list unless @_;
-    my $incre = join '|', map quotemeta, @INC;
+    my $incre = inc_re;
     $incre = qr|(?:$incre)/|;
     my $inst = inst;
     map {
         [$_, sort map {
-            s/$incre//; s|/|::|g;$_
+            s/$incre\///; s|/|::|g;$_
         } grep /\.pm$/, $inst->files($_)]
     } @_;
+}
+
+=item C<@paths = file_list $module>
+
+List the absolute paths of all files (except man pages) installed by
+C<$module>.
+
+=cut
+
+sub file_list
+{
+    my @ret = eval { grep /\.p(l|m|od)$/, inst->files(shift) };
+    @ret ? @ret : ();
 }
 
 =item C<@mods = doc_list>
@@ -701,7 +740,7 @@ sub tolisp($)
     }
 }
 
-=item C<printer(\@res, $wantarray)>
+=item C<printer(\@res)>
 
 Print C<@res> appropriately on the current filehandle.  If C<$ISEVAL>
 is true, use terse format.  Otherwise, use human-readable format,
@@ -718,23 +757,26 @@ which can use either L<Data::Dumper>, L<YAML>, or L<Data::Dump>.
         my $thing = @res > 1 ? \@res : $res[0];
         eval {
             $_ = Data::Dumper::Dumper($thing);
-            s/^\$VAR1 = //;
-            s/;$//;
         };
         if (length $_ > ($ENV{COLUMNS} || 80)) {
             $Data::Dumper::Indent = 1;
             eval {
                 $_ = Data::Dumper::Dumper($thing);
-                s/\A\$VAR1 = //;
-                s/;\Z//;
             };
-            s/\A\$VAR1 = //;
-            s/;\Z//;
         }
+        s/\A\$VAR1 = //;
+        s/;\Z//;
         $_;
     },
     plain => sub {
         "@res";
+    },
+    dumpvar => sub {
+        if (eval q{require 'dumpvar.pl';1}) {
+            dumpvar::veryCompact(1);
+            $PRINTER{dumpvar} = sub { dumpValue(\@res) };
+            goto &{$PRINTER{dumpvar}};
+        }
     },
     yaml => sub {
         eval q{ require YAML };
@@ -772,7 +814,7 @@ which can use either L<Data::Dumper>, L<YAML>, or L<Data::Dump>.
 sub ::_()
 {
     if (wantarray) {
-        @_
+        @res
     } else {
         $_
     }
@@ -781,17 +823,17 @@ sub ::_()
 sub printer
 {
     local *res = shift;
-    my ($wantarray) = @_;
     my $res;
     @_ = @res;
     $_ = @res == 1 ? $res[0] : @res == 0 ? undef : [@res];
     my $str;
     if ($ISEVAL) {
         $res = "@res";
-    } elsif (@res == 1 && UNIVERSAL::can($res[0], '()')) {
+    } elsif (@res == 1 && !$ISEVAL && $STRINGIFY
+                 && UNIVERSAL::can($res[0], '()')) {
         # overloaded?
-        $res = $res[0];
-    } elsif (!$ISEVAL && $PRINT_PRETTY && @res > 1 && !grep ref, @res) {
+        $res = "$res[0]";
+    } elsif (!$ISEVAL && $COLUMNATE && @res > 1 && !grep ref, @res) {
         $res = columnate(@res);
         print $res;
         return;
@@ -808,9 +850,10 @@ sub printer
 BEGIN {
     $PS1 = "> ";
     $PACKAGE = 'main';
-    $WANTARRAY = 1;
+    $WANTARRAY = '@';
     $PRINTER = 'dumper';
-    $PRINT_PRETTY = 1;
+    $COLUMNATE = 1;
+    $STRINGIFY = 1;
 }
 
 =item C<prompt()> -- Print the REPL prompt.
@@ -820,7 +863,7 @@ BEGIN {
 sub prompt()
 {
     run_hook @PRE_PROMPT;
-    "$PACKAGE ".($WANTARRAY ? '@' : '$').$PS1
+    "$PACKAGE $WANTARRAY$PS1"
 }
 
 sub Dump
@@ -938,6 +981,22 @@ sub define_shortcut
     $REPL{$name} = $fn;
     $REPL_DOC{$name} = $doc;
     $REPL_SHORT{$name} = $short;
+    abbrev \%RK, keys %REPL;
+}
+
+=item C<alias_shortcut $new, $old>
+
+Alias $new to do the same as $old.
+
+=cut
+
+sub alias_shortcut
+{
+    my ($new, $old) = @_;
+    $REPL{$new} = $REPL{$old};
+    $REPL_DOC{$new} = $REPL_DOC{$old};
+    ($REPL_SHORT{$new} = $REPL_SHORT{$old}) =~ s/^\Q$old\E/$new/;
+    abbrev %RK, keys %REPL;
 }
 
 =item C<define_shortcuts()>
@@ -971,6 +1030,7 @@ sub define_shortcuts
         'strict [0|1]', 'Turn \'use strict\' mode on or off';
     define_shortcut 'quit', \&Sepia::repl_quit,
         'Quit the REPL';
+    alias_shortcut 'exit', 'quit';
     define_shortcut 'restart', \&Sepia::repl_restart,
         'Reload Sepia.pm and relaunch the REPL.';
     define_shortcut 'shell', \&Sepia::repl_shell,
@@ -997,6 +1057,8 @@ sub define_shortcuts
         'freload MODULE', 'Reload MODULE and all its dependencies.';
     define_shortcut time => \&Sepia::repl_time,
         'time [0|1]', 'Print timing information for each command.';
+    define_shortcut lsmod => \&Sepia::repl_lsmod,
+        'lsmod [PATTERN]', 'List loaded modules matching PATTERN.';
 }
 
 =item C<repl_strict([$value])>
@@ -1011,6 +1073,31 @@ sub repl_strict
     if ($@) {
         print "Strict mode requires Lexical::Persistence.\n";
     } else {
+        # L::P has the stupid behavior of not persisting variables
+        # starting with '_', and dividing them into "contexts" based
+        # on whatever comes before the first underscore.  Get rid of
+        # that.
+        *Lexical::Persistence::parse_variable = sub {
+            my ($self, $var) = @_;
+
+            return unless (
+		my ($sigil, $member) = (
+                    $var =~ /^([\$\@\%])(\S+)/
+		)
+            );
+            my $context = '_';
+
+            if (defined $context) {
+		if (exists $self->{context}{$context}) {
+                    return $sigil, $context, $member if $context eq "arg";
+                    return $sigil, $context, "$sigil$member";
+		}
+		return $sigil, "_", "$sigil$context\_$member";
+            }
+
+            return $sigil, "_", "$sigil$member";
+        };
+
         *repl_strict = sub {
             my $x = as_boolean(shift, $STRICT);
             if ($x && !$STRICT) {
@@ -1178,7 +1265,7 @@ sub repl_define
         return;
     }
     define_shortcut $name, $sub, $doc;
-    %RK = abbrev keys %REPL;
+    # %RK = abbrev keys %REPL;
 }
 
 sub repl_undef
@@ -1191,7 +1278,7 @@ sub repl_undef
         delete $REPL{$full};
         delete $REPL_SHORT{$full};
         delete $REPL_DOC{$full};
-        %RK = abbrev keys %REPL;
+        abbrev \%RK, keys %REPL;
     } else {
         print "$name: no such shortcut.\n";
     }
@@ -1202,7 +1289,7 @@ sub repl_format
     my $t = shift;
     chomp $t;
     if ($t eq '') {
-        print "printer = $PRINTER, pretty = @{[$PRINT_PRETTY ? 1 : 0]}\n";
+        print "printer = $PRINTER, columnate = @{[$COLUMNATE ? 1 : 0]}\n";
     } else {
         my %formats = abbrev keys %PRINTER;
         if (exists $formats{$t}) {
@@ -1324,10 +1411,14 @@ sub methods
         defined *{$_}{CODE}
     } map { "$pack\::$_" } keys %{$pack.'::'}
         : grep {
-            defined *{"$pack\::$_"}{CODE}
+            defined &{"$pack\::$_"}
         } keys %{$pack.'::'};
-    (@own, defined *{$pack.'::ISA'}{ARRAY}
-         ? (map methods($_, $qualified), @{$pack.'::ISA'}) : ());
+    if (exists ${$pack.'::'}{ISA} && *{$pack.'::ISA'}{ARRAY}) {
+        my %m;
+        undef @m{@own, map methods($_, $qualified), @{$pack.'::ISA'}};
+        @own = keys %m;
+    }
+    @own;
 }
 
 sub repl_methods
@@ -1353,20 +1444,14 @@ sub as_boolean
 
 sub repl_wantarray
 {
-    $WANTARRAY = as_boolean shift, $WANTARRAY;
+    $WANTARRAY = shift || $WANTARRAY;
+    $WANTARRAY = '' unless $WANTARRAY eq '@' || $WANTARRAY eq '$';
 }
 
 sub repl_package
 {
     chomp(my $p = shift);
-    no strict;
-    if (%{$p.'::'}) {
-        $PACKAGE = $p;
-#         my $ecmd = '(setq sepia-eval-package "'.$p.'")';
-#         print ";;;###".length($ecmd)."\n$ecmd\n";
-    } else {
-        warn "Can't go to package $p -- doesn't exist!\n";
-    }
+    $PACKAGE = $p;
 }
 
 sub repl_quit
@@ -1398,8 +1483,10 @@ sub repl_eval
     no strict;
     # local $PACKAGE = $pkg || $PACKAGE;
     if ($STRICT) {
-        if (!$WANTARRAY) {
+        if ($WANTARRAY eq '$') {
             $buf = 'scalar($buf)';
+        } elsif ($WANTARRAY ne '@') {
+            $buf = '$buf;1';
         }
         my $ctx = join(',', keys %{$STRICT->get_context('_')});
         $ctx = $ctx ? "my ($ctx);" : '';
@@ -1411,10 +1498,12 @@ sub repl_eval
         $STRICT->call($buf);
     } else {
         $buf = "do { package $PACKAGE; no strict; $buf }";
-        if ($WANTARRAY) {
+        if ($WANTARRAY eq '@') {
             eval $buf;
-        } else {
+        } elsif ($WANTARRAY eq '$') {
             scalar eval $buf;
+        } else {
+            eval $buf; undef
         }
     }
 }
@@ -1461,14 +1550,29 @@ sub repl_save
     store save($re), $file;
 }
 
+sub modules_matching
+{
+    my $pat = shift;
+    if ($pat =~ /^\/(.*)\/?$/) {
+        $pat = $1;
+        $pat =~ s#::#/#g;
+        $pat = qr/$pat/;
+        grep /$pat/, keys %INC;
+    } else {
+        my $mod = $pat;
+        $pat =~ s#::#/#g;
+        exists $INC{"$pat.pm"} ? "$pat.pm" : ();
+    }
+}
+
 sub full_reload
 {
-    (my $name = shift) =~ s!::!/!g;
-    $name .= '.pm';
-    print STDERR "full reload $name\n";
     my %save_inc = %INC;
     local %INC;
-    require $name;
+    for my $name (modules_matching $_[0]) {
+        print STDERR "full reload $name\n";
+        require $name;
+    }
     my @ret = keys %INC;
     while (my ($k, $v) = each %save_inc) {
         $INC{$k} ||= $v;
@@ -1486,6 +1590,11 @@ sub repl_full_reload
 sub repl_reload
 {
     chomp (my $pat = shift);
+    # for my $name (modules_matching $pat) {
+    #     delete $INC{$PAT};
+    #     eval "require $name";
+    #     if (!$@) {
+    #     (my $mod = $name) =~ s/
     if ($pat =~ /^\/(.*)\/?$/) {
         $pat = $1;
         $pat =~ s#::#/#g;
@@ -1507,11 +1616,35 @@ sub repl_reload
         if (exists $INC{$pat}) {
             delete $INC{$pat};
             eval 'require $mod';
-            import $mod if $@;
+            import $mod unless $@;
             print "Reloaded $mod.\n"
         } else {
             print "$mod not loaded.\n"
         }
+    }
+}
+
+sub repl_lsmod
+{
+    chomp (my $pat = shift);
+    $pat ||= '.';
+    $pat = qr/$pat/;
+    my $first = 1;
+    my $fmt =  "%-20s%8s  %s\n";
+    for (sort keys %INC) {
+        my $file = $_;
+        s!/!::!g;
+        s/\.p[lm]$//;
+        next if /^::/ || !/$pat/;
+        if ($first) {
+            printf $fmt, qw(Module Version File);
+            printf $fmt, qw(------ ------- ----);
+            $first = 0;
+        }
+        printf $fmt, $_, (UNIVERSAL::VERSION($_)||'???'), $INC{$file};
+    }
+    if ($first) {
+        print "No modules found.\n";
     }
 }
 
@@ -1586,7 +1719,7 @@ Behavior is controlled in part through the following package-globals:
 
 =item C<$WANTARRAY> -- evaluation context
 
-=item C<$PRINT_PRETTY> -- format some output nicely (default = 1)
+=item C<$COLUMNATE> -- format some output nicely (default = 1)
 
 Format some values nicely, independent of $PRINTER.  Currently, this
 displays arrays of scalars as columns.
@@ -1612,13 +1745,14 @@ sub repl_setup
     $| = 1;
     if ($REPL_LEVEL == 0) {
         define_shortcuts;
-        -f "$ENV{HOME}/.sepiarc" and do "$ENV{HOME}/.sepiarc";
+        -f "$ENV{HOME}/.sepiarc" and eval qq#package $Sepia::PACKAGE; do "$ENV{HOME}/.sepiarc"#;
         warn ".sepiarc: $@\n" if $@;
     }
     Sepia::Debug::add_repl_commands;
     repl_banner if $REPL_LEVEL == 0;
-    print prompt;
 }
+
+$READLINE = sub { print prompt(); <STDIN> };
 
 sub repl
 {
@@ -1627,23 +1761,21 @@ sub repl
 
     my $in;
     my $buf = '';
-    my $sigged = 0;
+    $SIGGED = 0;
 
-    my $nextrepl = sub { $sigged = 1; };
+    my $nextrepl = sub { $SIGGED++; };
 
-    local @_;
-    local $_;
+    local (@_, $_);
     local *CORE::GLOBAL::die = \&Sepia::Debug::die;
     local *CORE::GLOBAL::warn = \&Sepia::Debug::warn;
-    local @REPL_RESULT;
     my @sigs = qw(INT TERM PIPE ALRM);
     local @SIG{@sigs};
     $SIG{$_} = $nextrepl for @sigs;
- repl: while (defined(my $in = <STDIN>)) {
-            if ($sigged) {
+ repl: while (defined(my $in = $READLINE->())) {
+            if ($SIGGED) {
                 $buf = '';
-                $sigged = 0;
-                print "\n", prompt;
+                $SIGGED = 0;
+                print "\n";
                 next repl;
             }
             $buf .= $in;
@@ -1658,7 +1790,6 @@ sub repl
                     $len -= $tmp;
                 }
             }
-            my (@res);
             ## Only install a magic handler if no one else is playing.
             local $SIG{__WARN__} = $SIG{__WARN__};
             @warn = ();
@@ -1690,7 +1821,6 @@ sub repl
                         print "Unrecognized shortcut '$short'\n";
                     }
                     $buf = '';
-                    print prompt;
                     next repl;
                 }
             } else {
@@ -1705,11 +1835,10 @@ sub repl
                         Sepia::printer [$@], wantarray;
                         # print_warnings $ISEVAL;
                         $buf = '';
-                        print prompt;
                     } elsif ($@ =~ /(?:at|before) EOF(?:$| at)/m) {
                         ## Possibly-incomplete line
                         if ($in eq "\n") {
-                            print "Error:\n$@\n*** cancel ***\n", prompt;
+                            print "Error:\n$@\n*** cancel ***\n";
                             $buf = '';
                         } else {
                             print ">> ";
@@ -1723,7 +1852,6 @@ sub repl
                             print "error: $@";
                             print "\n" unless $@ =~ /\n\z/;
                         }
-                        print prompt;
                         $buf = '';
                     }
                     next repl;
@@ -1736,10 +1864,9 @@ sub repl
             }
             $buf = '';
             print_warnings;
-            print prompt;
         }
     exit if $REPL_QUIT;
-    wantarray ? @REPL_RESULT : $REPL_RESULT[0]
+    wantarray ? @res : $res[0]
 }
 
 sub perl_eval
@@ -1831,15 +1958,15 @@ sub html_package_list
 {
     my ($file, $base) = @_;
     return unless inst();
+    my %ns;
+    for (package_list) {
+        push @{$ns{$1}}, $_ if /^([^:]+)/;
+    }
     $base ||= 'about://perldoc/';
     my $out;
     open OUT, ">", $file || \$out or return;
     print OUT "<html><body><ul>";
     my $pfx = '';
-    my %ns;
-    for (package_list) {
-        push @{$ns{$1}}, $_ if /^([^:]+)/;
-    }
     for (sort keys %ns) {
         if (@{$ns{$_}} == 1) {
             print OUT
@@ -1858,18 +1985,40 @@ sub html_package_list
 
 sub apropos_module
 {
-    my $re = qr/$_[0]/;
+    my $re = _apropos_re $_[0], 1;
     my $inst = inst();
     my %ret;
-    for (package_list) {
-        undef $ret{$_} if /$re/;
+    my $incre = inc_re;
+    for ($inst->files('Perl', 'prog'), package_list) {
+        if (/\.\d?(?:pm)?$/ && !/man1/ && !/usr\/bin/ && /$re/) {
+            s/$incre//;
+            s/.*man.\///;
+            s|/|::|g;
+            s/^:+//;
+            s/\.\d?(?:p[lm])?$//;
+            undef $ret{$_} 
+        }
     }
-    undef $ret{$_} for map {
-        s/.*man.\///; s|/|::|g; s/\.\d(?:pm)?$//; $_
-    } grep {
-        /\.\d(?:pm)?$/ && !/man1/ && !/usr\/bin/ && /$re/
-    } $inst->files('Perl');
     sort keys %ret;
+}
+
+sub requires
+{
+    my $mod = shift;
+    my @q = $REQUIRES{$mod};
+    my @done;
+    while (@q) {
+        my $m = shift @q;
+        push @done, $m;
+        push @q, @{$REQUIRES{$m}};
+    }
+    @done;
+}
+
+sub users
+{
+    my $mod = shift;
+    @{$REQUIRED_BY{$mod}}
 }
 
 1;
@@ -1895,7 +2044,7 @@ Bug reports welcome, patches even more welcome.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2005-2009 Sean O'Rourke.  All rights reserved, some
+Copyright (C) 2005-2010 Sean O'Rourke.  All rights reserved, some
 wrongs reversed.  This module is distributed under the same terms as
 Perl itself.
 

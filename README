@@ -39,13 +39,19 @@ run on other versions of Emacs, but may require additional packages.
     apel-emacs21-10.7
     ja-nkf-2.05
 
+* DEVELOPMENT
+The "official" source code repository mirror is at
+
+    http://repo.or.cz/w/sepia.git
+
+To get a copy, install Git, then
+
+    git clone git://repo.or.cz/sepia.git
+
+To submit a patch, please send a diff to the author, including an
+Emacs-style ChangeLog entry.
 * TODO
-** (Easy) Use module, file, line to refine queries (Perl side)
 ** (Medium) Get the variable def/use analysis working again.
-** (Hard) Use module, file, line to filter results (Emacs side)
-** (Medium) Let sepia-next go backward
-   Need to use a vector plus current index instead of a list for
-   sepia-found.
 ** (Hard) return from anything in the debugger
    Make it possible to return from intermediate calls in the debugger.
    Returning from die() is not often useful.
@@ -68,6 +74,10 @@ run on other versions of Emacs, but may require additional packages.
    multi-line statements, etc.  Fix this somehow.  One way might be to
    temporary regain control on a op_next/op_nextstate, or whatever
    those are called, but this would be hard and/or require XS.
+
+   If we set $^P to populate @dbline, we can use that to find
+   breakable lines, but that still doesn't fix backward branches in
+   loops.
 ** (Medium) Make "finish" more reliable
    It currently assumes that the last breakable statement in a sub is
    one line before its end.  The "right" solution would be like above:
@@ -95,8 +105,22 @@ reproduce, with the dates they were first observed.
    Nothing smart is done about packages, so e.g. "new Foo" will result
    in listings for every instance of "new" in your program.
 ** (2008-01-18) the first value printed in the debugger is undef.  why?!
+** (2009-12-13) completion deletes things it shouldn't
+   e.g. $x->method => method.  I need to rewrite this code to not
+   suck.
+** (2010-09-30) <backspace> broken in view-mode
+   <backspace> should scroll up if you enable view-mode, but for
+   whatever reason it stays bound to hungry-delete.  I'm not sure if
+   this is my fault, or cperl's.
+** (2011-02-22) Sepia::Xref::load_pad segfaults
+While traversing inside File::Find::contract_name.  Backtrace:
+    #0  0x00000001001afa30 in XS_B__COP_hints_hash ()
+    #1  0x00000001001b12ba in XS_B__GV_STASH ()
+    #2  0x0000000100075708 in Perl_pp_entersub ()
+    #3  0x000000010006e6cc in Perl_runops_standard ()
+    #4  0x000000010006e43a in perl_run ()
 * COPYRIGHT AND LICENCE
-Copyright (C) 2004-2009 Sean O'Rourke
+Copyright (C) 2004-2010 Sean O'Rourke
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, at the time at which this

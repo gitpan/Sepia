@@ -74,7 +74,7 @@ our %var_def;
 our %var_use;
 
 require Exporter;
-our @ISA = qw(Exporter);
+our @ISA = 'Exporter';
 my @most = qw(redefined forget rebuild callers callees
 	      var_defs var_uses
 	      var_apropos);
@@ -262,6 +262,10 @@ sub load_pad {
 
             # XXX: for some reason, on 5.10 $valsv->STASH can be a
             # B::SPECIAL, which doesn't have a name.
+
+            # XXX: this segfaults on 5.10 for some reason while
+            # traversing File::Find::contract_name from main
+
             next if ref $valsv->STASH eq 'B::SPECIAL';
 	    $pad[$ix] = [$valsv->STASH->NAME, "*", $valsv->NAME];
 	}
@@ -291,7 +295,6 @@ sub xref {
 	    xref($op->pmreplstart);
 	} else {
 	    no strict 'refs';
-#             print STDERR $opname;
 	    my $ppname = "pp_$opname";
 	    &$ppname($op) if defined(&$ppname);
 	}

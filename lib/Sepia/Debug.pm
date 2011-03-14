@@ -12,8 +12,16 @@ sub define_shortcut;
 BEGIN {
     ## Just leave it on -- with $DB::trace = 0, there doesn't seem
     ## to be a performance penalty!
-    ## enter/exit | per-line | sub locations | eval filenames | anon subnames
-    $^P = 0x313;                # 01 | 02 | 10 | 100 | 200
+    ##
+    ## Flags we use are (see PERLDBf_* in perl.h):
+    ## 0x1	Debugging sub enter/exit (call DB::sub if defined)
+    ## 0x2      per-line debugging (keep line numbers)
+    ## 0x8      "preserve more data" (call DB::postponed??)
+    ## 0x10     keep line ranges for sub definitions in %DB::sub
+    ## 0x100    give evals informative names
+    ## 0x200    give anon subs informative names
+    ## 0x400    save source lines in %{"_<$filename"}
+    $^P = 0x01 | 0x02 | 0x10 | 0x100 | 0x200;
     $STOPDIE = 1;
     $STOPWARN = 0;
 }
@@ -40,6 +48,7 @@ sub repl_backtrace
     for (my $i = 0; ; ++$i) {
         my ($pack, $file, $line, $sub) = caller($i);
         last unless $pack;
+        $Sepia::SIGGED && do { $Sepia::SIGGED--; last };
         # XXX: 4 is the magic number...
         print($i == $level+4 ? "*" : ' ', " [$i]\t$sub ($file:$line)\n");
     }
@@ -123,7 +132,8 @@ sub repl_dbsub
 sub repl_lsbreak
 {
     no strict 'refs';
-    for my $file (sort grep /^_</ && defined %{"::$_"}, keys %::) {
+    for my $file (sort grep /^_</ && *{"::$_"}{HASH}, keys %::) {
+        $Sepia::SIGGED && do { $Sepia::SIGGED--; last };
         my ($name) = $file =~ /^_<(.*)/;
         my @pts = keys %{"::$file"};
         next unless @pts;
@@ -352,7 +362,7 @@ sub add_debug_repl_commands
     define_shortcut step => sub {
         $DB::single = shift || 1;
         last repl;
-    }, 'step [N]', 'Step N lines forward, entering subroutines.';
+    }, 'step [N]', 'Step N statements forward, entering subroutines.';
 
     define_shortcut finish => \&repl_finish,
         'finish', 'Finish the current subroutine.';

@@ -6,6 +6,11 @@
 @direntry
 * Sepia: (sepia).    Simple Emacs Perl Integration.
 @end direntry
+@copying
+Copyright @copyright{} 2005-2010 Sean O'Rourke.  All rights reserved,
+some wrongs reversed.  This module is distributed under the same terms
+as Perl.
+@end copying
 @c %**end of header
 
 @titlepage
@@ -41,15 +46,16 @@ Sepia is a set of Perl development tools for Emacs supporting code
 navigation and interactive evaluation.
 
 @menu
-* Introduction::                
-* Editing::                     
-* Interactive Perl::            
-* CPAN browsing::               
-* Customization::               
-* Internals::                   
+* Introduction::
+* Editing::
+* Interactive Perl::
+* CPAN browsing::
+* Customization::
+* Internals::
+* FAQ::
 * Credits::                     
-* Function Index::              
-* Variable Index::              
+* Function Index::
+* Variable Index::
 @end menu
 
 @c ============================================================
@@ -106,10 +112,13 @@ class and file trees.  Rather than supporting interactive evaluation of
 small pieces of code, they perform background semantic checking on whole
 projects and highlight errors.  Rather than allowing minor
 customizations to grow organically into features, they support limited
-configuration files and baroque plug-in APIs.  Sepia tries to adhere to
-the apparent Emacs philosophy that rich semantic information should be
-unobtrusive, and that the best way to build working code is to start
-by experimenting with small pieces.
+configuration files and baroque plug-in APIs@footnote{In my brief
+experience with Visual Studio, I was struck by the fact that I saw
+several toolbars, a couple of navigation windows, and a tiny view of the
+actual code.  Sometimes a tooltip would obscure part of that tiny
+window.}.  Sepia tries to adhere to the apparent Emacs philosophy that
+rich semantic information should be unobtrusive, and that the best way
+to build working code is to start by experimenting with small pieces.
 
 Language support packages for Emacs vary widely in the degree to which
 they make use of or replace existing Emacs features.  Minimal modes
@@ -453,6 +462,10 @@ with @code{sepia-complete-symbol}.
 Sepia also provides a number of other ways to evaluate pieces of code in
 Perl, and commands to process buffer text using the inferior process.
 
+Finally, Sepia comes with the @kbd{sepl} program, a standalone REPL that
+can be run from the command-line, and provides many features of the
+Emacs-based REPL.
+
 @menu
 * Shortcuts::                   
 * Debugger::                    
@@ -490,7 +503,12 @@ passed the raw command-line text as its first argument.
 @item format @var{type}
 Set the output format to @var{type}, either ``dumper'' (using
 @code{Data::Dumper}), ``dump'' (@code{Data::Dump}), ``yaml''
-(@code{YAML}), or ``plain'' (stringification).  Default: ``dumper''.
+(@code{YAML}), ``peek'' (@code{Devel::Peek}), ``dumpvar''
+(@code{dumpvar.pl}, somewhat rough), or ``plain'' (stringification).
+Default: ``dumper''.
+
+Note that this setting is independent of @code{$COLUMNATE} and
+@code{$STRINGIFY}.
 
 @item help
 Display a list of shortcuts.
@@ -501,6 +519,9 @@ created by @kbd{save}.
 
 @item lsbreak
 List breakpoints.
+
+@item lsmod [@var{pattern}]
+List currently-loaded modules matching optional @var{pattern}.
 
 @item methods @var{name} [@var{regexp}]
 Display a list of functions defined in package @var{name} and its
@@ -562,8 +583,8 @@ Undefine shortcut @var{name}.  @strong{Warning}: this can equally be
 used to remove built-in shortcuts.
 
 @item wantarray [@var{val}]
-Set the evaluation context to @var{val}, or toggle between scalar and
-array context.
+Set the evaluation context to @var{val}: @code{@@} means array, @code{$}
+means scalar, and anything else means void.
 
 @item who @var{package} [@var{regexp}]
 @itemx who [@var{regexp}]
@@ -745,12 +766,12 @@ While Sepia can be customized in both the Perl and Emacs Lisp, most of
 the user-accessible configuration is in the latter.
 
 @menu
-* Emacs Variables::             
-* Perl Variables::              
+* Emacs Customization::             
+* Perl Customization::              
 @end menu
 
-@node Emacs Variables, Perl Variables, Customization, Customization
-@section Emacs Variables
+@node Emacs Customization, Perl Customization, Customization, Customization
+@section Emacs Customization
 
 Since Sepia tries where possible to reuse existing Emacs functionality,
 its behavior should already be covered by existing customizations.  The
@@ -812,10 +833,11 @@ Default: @code{sepia-w3m-view-pod} if Emacs-w3m is available, or
 
 @end vtable
 
-@node Perl Variables,  , Emacs Variables, Customization
-@section Perl Variables
+@node Perl Customization,  , Emacs Customization, Customization
+@section Perl Customization
 
 When Sepia starts up, it evaluates the Perl script in @file{~/.sepiarc}.
+
 The following variables in the Sepia package control various aspects of
 interactive evaluation.
 
@@ -829,10 +851,13 @@ when code is evaluated from a buffer.  Default: @code{main}.
 The function called to format interactive output, normally set with the
 @code{printer} shortcut.
 
-@item $PRINT_PRETTY
-If true, format some values nicely independent of the value of
-@code{$PRINTER}.  Currently, this means columnating lists of simple
-scalars.  Default: true.
+@item $COLUMNATE
+If true, columnate simple arrays independent of the value of
+@code{$PRINTER}.  Default: true.
+
+@item $STRINGIFY
+If true, stringify objects that overload the operation independent of
+the value of @code{$PRINTER}.  Default: true.
 
 @item $PS1
 The trailing end of the prompt string, which should end with ``> ''.
@@ -847,23 +872,41 @@ If true, calls to @code{warn} from interactive code will invoke the
 Sepia debugger.  Default: false.
 
 @item $WANTARRAY
-If true, evaluate interactive expressions in list context.  Default: true.
+If @code{@@}, evaluate interactive expressions in list context, if
+@code{$}, scalar, otherwise, void.  Default: @code{@@}.
 
 @end table
 
-Additional REPL shortcuts can be defined with
-@kbd{Sepia::define_shortcut}.  For example
+Additional REPL shortcuts can be defined as follows:
+
+@table @code
+
+@item Sepia::define_shortcut @var{name}, @var{function} [, @var{shortdoc} [, @var{longdoc}]]
+
+Define a shortcut @var{name} to call @var{function}.  Also define a
+short usage message @var{shortdoc} and documentation @var{longdoc}.  For
+example,
 
 @example
+
 Sepia::define_shortcut time => sub @{ print scalar localtime, "\n" @},
     'time', 'Display the current time.';
+
 @end example
 
-defines a shortcut ``time'' that displays the current time.  For
-details, see the code in @file{Sepia.pm}.
+defines a shortcut ``time'' that displays the current time.  For more
+examples, see the function @var{define_shortcuts} code in
+@file{Sepia.pm}.
+
+@item Sepia::alias_shortcut @var{new}, @var{old}
+
+Make @var{new} an alias for @var{old}.
+
+@end table
+
 
 @c ============================================================
-@node Internals, Credits, Customization, Top
+@node Internals, FAQ, Customization, Top
 @chapter Internals
 
 Many things remain unexplained except by the code itself, and some
@@ -871,7 +914,31 @@ details mentioned above should probably be given less prominence.  For
 developer documentation, please see the POD for @code{Sepia} and
 @code{Sepia::Xref}, and the doc-strings in @file{sepia.el}.
 
-@node Credits, Function Index, Internals, Top
+@node FAQ, Credits, Internals, Top
+@chapter FAQ
+
+@table @asis
+@item Can I use @code{Sepia} outside of Emacs?
+Sepia comes with the @file{sepl} program, a command-line REPL using the
+@code{Sepia::Readline} module, that provides many features of the
+Emacs-based REPL.  It could be improved, though -- patches welcome!
+
+@item Why is the documentation in TeXInfo format?!
+TeXInfo is the worst form of documentation, except for all the others.
+TeX and LaTeX produce beautiful printed output, and Info is the best way
+to view documentation in Emacs for things that are not themselves part
+of Emacs (i.e. ``can have docstrings'').
+
+It's awful to edit, being both verbose and redundant -- just look at
+AUCTeX's @code{texinfo-every-node-update} for desperate placation of the
+suck, then try to figure out what's wrong when @file{makeinfo} complains
+about @code{texinfo-every-node-update}'s output -- but it's what we
+have.  At least it sucks less than @code{DocBook}, raw HTML, or
+@file{troff}.
+
+@end table
+
+@node Credits, Function Index, FAQ, Top
 @unnumbered Credits
 
 @table @asis

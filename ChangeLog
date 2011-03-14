@@ -1,3 +1,88 @@
+2011-02-22  Sean O'Rourke  <seano@cpan.org>
+
+2010-11-05  Sean O'Rourke  <seano@cpan.org>
+
+	* sepia.el (sepia-next, sepia-show-locations,sepia-set-found):
+	Always use next-error.
+	* sepia-w3m.el (w3m-about-perldoc-buffer): let user know when
+	there are POD errors.
+
+2010-10-04  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* sepia.el (sepia-perldoc-this): Display documentation in a less
+	annoying way.
+	(cperl-imenu--create-perl-index): Advise it to strip out some entries.
+
+	* Sepia.pm: dumpvar.pl and Devel::Peek format options.
+
+2010-09-21  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm (track_requires): New function.
+	(file_list): New function.
+	Add 'dumpvar' flavor of output.
+	(repl_lsmod): New function.
+	(requires,users): Use track_requires.
+
+	* sepia.el (sepia-dired-package): New function.
+	(sepia-skip-doc-scan): New variable.
+	(sepia-doc-update): Use previous to skip confusing files.
+	(sepia-find-loaded-modules): New function.
+	(cperl-imenu--create-perl-index): Filter cruft.
+
+2010-09-13  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* sepia.el (sepia-doc-scan-buffer): Avoid spurious matches.
+	(sepia-find-loaded-modules): New function.
+
+2010-09-12  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm (repl_strict): Disable Lexical::Persistence's
+	stupid treatment of '_'.
+
+2010-08-18  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm: remove useless @REPL_RESULT.  Fix _() to use @res.
+
+2010-08-16  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* sepia.el (sepia-shared-map, sepia-eval-region): new function
+	bound to `C-c C-r', moving sepia-repl to `C-c C-t'.
+	* lib/Sepia.pm: disable deprecation warnings to avoid 5.12 lameness.
+
+2010-02-08  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* sepia.el (sepia-looks-like-module): remove apropos-module check.
+	* lib/Sepia.pm (_apropos_re): make start anchor optional.
+	(inc_re): factor out @INC-removal.
+	(module_list): use inc_re().
+	(modules_matching): new function.
+	(apropos_module): rewrite.
+
+2010-01-24  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm (repl_setup): load ~/.sepiarc in $Sepia::PACKAGE.
+
+2010-01-23  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* README: add development information.
+	* lib/Sepia.pm (apropos_module): use "_apropos_re"
+
+2009-12-15  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm (repl_package): always change packages, even if
+	empty.
+
+2009-12-14  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia/ReadLine.pm: readline interface.
+	* lib/Sepia.pm ($READLINE): next-input hook.
+
+2009-12-08  Sean O'Rourke  <seano@cs.ucla.edu>
+
+	* lib/Sepia.pm (methods): uniquify.
+	* lib/Sepia.pm, lib/Sepia/Debug.pm: avoid deprecated
+	"defined %hash" in 5.11.x.
+
 2009-12-02  Sean O'Rourke  <seano@cs.ucla.edu>
 
 	* lib/Sepia/Xref.pm (load_pad): work around pad weirdness with
