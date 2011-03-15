@@ -1,5 +1,5 @@
-MANIFEST
 ChangeLog
+MANIFEST
 Makefile.PL
 README
 Sepia.html
@@ -17,9 +17,10 @@ sepia-w3m.el
 sepia.el
 sepia.info
 sepia.texi
+sepl
 t/01basic.t
 t/02completion.t
+t/03without.t
 t/50expect.t
 t/testy.pl
-ChangeLog
 META.yml                                 Module meta-data (added by MakeMaker)

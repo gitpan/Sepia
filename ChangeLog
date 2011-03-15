@@ -1,5 +1,10 @@
 2011-03-14  Sean O'Rourke  <seano@cpan.org>
 
+	* VERSION: 0.991_05 (testing).
+	* sepl: add to MANIFEST
+
+2011-03-14  Sean O'Rourke  <seano@cpan.org>
+
 	* VERSION: 0.991_04 (testing).
 	* Makefile.PL (prompt_for_infodir): filter out Emacs-spam.
 
