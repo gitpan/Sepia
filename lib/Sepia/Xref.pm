@@ -115,6 +115,7 @@ my %code = (intro => "i", used => "",
 	    subdef => "s", subused => "&",
 	    formdef => "f", meth => "->");
 
+=over 4
 
 =head2 Functions
 

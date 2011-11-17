@@ -24,7 +24,7 @@ __END__
 
 =head1 NAME
 
-sepl -- a Term::ReadLine-based Sepia interactive shell.
+C<sepl> -- a Term::ReadLine-based Sepia interactive shell.
 
 =head1 SYNOPSIS
 
@@ -35,5 +35,30 @@ sepl -- a Term::ReadLine-based Sepia interactive shell.
     main @>
 
 =head1 DESCRIPTION
+
+C<sepl> uses L<Sepia::ReadLine> to provide an interactive Perl shell
+with many of the L<Sepia> features available in Emacs, including
+completion and all shortcuts.  It is not well-tested or frequently
+used, and should be considered experimental.
+
+=head1 SEE ALSO
+
+L<Sepia>, L<Term::ReadLine>.
+
+Most of C<Sepia>'s documentation is installed in Emacs' C<info>
+format.  On most systems it can be read from the command-line by
+typing "C<info sepia>".
+
+=head1 AUTHOR
+
+Sean O'Rourke, E<lt>seano@cpan.orgE<gt>
+
+Bug reports welcome, patches even more welcome.
+
+=head1 COPYRIGHT
+
+Copyright (C) 2010-2011 Sean O'Rourke.  All rights reserved, some
+wrongs reversed.  This module is distributed under the same terms as
+Perl itself.
 
 =cut

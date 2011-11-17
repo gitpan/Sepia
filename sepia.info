@@ -138,26 +138,33 @@ development.  Here is a list of the ones I have heard about, along with
 my brief impression of how they differ from Sepia.  Since I use none of
 them regularly, these impressions should be taken with a grain of salt.
 
-`PDE'
+`Emacs::PDE'
      PDE is similar to Sepia in offering an interactive Lisp-like
      development environment interfacing with a long-running Perl
      process.  It seems more ambitious, and therefore a bit more
      invasive.
 
-     `http://search.cpan.org/search?query=pde&mode=module'
+     `http://search.cpan.org/dist/Emacs-PDE/'
 
 `Devel::PerlySense'
      Devel::PerlySense offers a more Eclipse-like development
      environment, with offline code analysis via PPI.
 
-     `http://search.cpan.org/search?query=devel::perlysense&mode=module'
+     `http://search.cpan.org/dist/Devel-PerlySense/'
 
 `Emacs::EPL'
      Emacs::EPL is a low-level IPC interface between Emacs and Perl.
      Sepia was originally based on Emacs::EPL, but the current
      `comint'-based implementation proved more maintainable.
 
-     `http://search.cpan.org/search?query=emacs::epl&mode=module'
+     `http://search.cpan.org/dist/Emacs-EPL/'
+
+`Stylish'
+     Stylish is a similar effort with a very different implementation
+     philosophy, requiring maximal rather than minimal dependencies in
+     both Perl and Emacs, and reimplementing `comint' in Emacs.
+
+     `http://github.com/jrockway/stylish.git'
 
 
 
@@ -255,7 +262,7 @@ location.
      automatically goes to the first function definition or variable
      use found.
 
-`M-. l'
+`M-. d'
 `M-x sepia-location'
      Jump directly to the definition of the function at point,
      prompting if point is not on a known function.  If multiple
@@ -268,6 +275,14 @@ location.
      interactive completion, press <:> to descend into a package, <DEL>
      to ascend to a parent package, and <RET> to go to the
      currently-selected function.
+
+`M-. l'
+`M-x sepia-pod-follow-link-at-point'
+     Follow the POD link (`L<...>') at point, or prompt for a link if
+     there is none.  Go to the appropriate location in the document
+     source or, with a prefix argument, in the rendered documentation.
+     This can be especially useful when writing links in your own
+     documentation.
 
 
    The second kind of navigation commands always prompts the user -
@@ -340,7 +355,7 @@ Sepia can be used to browse installed modules' documentation, to format
 and display the current buffer's POD, and to browse the list of modules
 installed on the system.
 
-`M-. d NAME <RET>'
+`M-. p NAME <RET>'
 `M-x sepia-perldoc-this'
      View documentation for module NAME or Perl manual page NAME.
 
@@ -497,9 +512,12 @@ additional shortcuts (*Note Debugger::.).
      Execute shell command COMMAND, displaying its standard output and
      standard error.
 
-`size [PACKAGE [REGEXP]]'
+`size PACKAGE [REGEXP]'
+
+`size [REGEXP]'
      List the variables in PACKAGE (or the current package) along with
-     their total sizes.  This requires the `Devel::Size' module.
+     their total sizes.  This requires the `Devel::Size' module.  In
+     strict mode, list lexical variables if no PACKAGE is given.
 
 `strict [VAL]'
      Set evaluation strictness to VAL, or toggle it if VAL is not
@@ -527,7 +545,8 @@ additional shortcuts (*Note Debugger::.).
 `who PACKAGE [REGEXP]'
 `who [REGEXP]'
      List identifiers in PACKAGE (main by default) matching optional
-     REGEXP.
+     REGEXP.  In strict mode, list lexical variables if no PACKAGE is
+     given.
 
 
 
@@ -717,20 +736,20 @@ configuration can be done with `sepia-repl-mode-hook'.
 `sepia-complete-methods'
      If non-`nil', `sepia-complete-symbol' will complete simple method
      calls of the form `$x->' or `Module->'.  Since the former requires
-     evaluation of `$x', this can be disabled.  Default: `T'.
+     evaluation of `$x', this can be disabled.  Default: `t'.
 
 `sepia-eval-defun-include-decls'
      If non-`nil', attempt to generate a declaration list for
      `sepia-eval-defun'.  This is necessary when evaluating some code,
      such as that calling functions without parentheses, because the
      presence of declarations affects the parsing of barewords.
-     Default: `T'.
+     Default: `t'.
 
 `sepia-indent-expand-abbrev'
      If non-`nil', `sepia-indent-or-complete' will, if reindentation
      does not change the current line, expand an abbreviation before
      point rather than performing completion.  Only if no abbreviation
-     is found will it perform completion.  Default: `T'.
+     is found will it perform completion.  Default: `t'.
 
 `sepia-module-list-function'
      The function to view a tree of installed modules.  Default:
@@ -756,7 +775,7 @@ configuration can be done with `sepia-repl-mode-hook'.
 `sepia-use-completion'
      If non-`nil', various Sepia functions will generate completion
      candidates from interactive Perl when called interactively.  This
-     may be slow or undesirable in some situations.  Default: `T'.
+     may be slow or undesirable in some situations.  Default: `t'.
 
 `sepia-view-pod-function'
      The function called to view the current buffer's documentation.
@@ -848,6 +867,10 @@ Can I use `Sepia' outside of Emacs?
      `Sepia::Readline' module, that provides many features of the
      Emacs-based REPL.  It could be improved, though - patches welcome!
 
+     `sepl' currently provides completion for `Term::ReadLine::Gnu' and
+     `Term::ReadLine::Perl'.  If you have neither of these, using
+     `rlwrap' might be the best option.
+
 Why is the documentation in TeXInfo format?!
      TeXInfo is the worst form of documentation, except for all the
      others.  TeX and LaTeX produce beautiful printed output, and Info
@@ -891,43 +914,44 @@ Function Index
  [index ]
 * Menu:
 
-* sepia-apropos:                         Navigation.           (line 60)
-* sepia-apropos-module:                  Navigation.           (line 63)
-* sepia-callees:                         Navigation.           (line 73)
-* sepia-callers:                         Navigation.           (line 69)
-* sepia-complete-symbol:                 Completion.           (line 38)
-* sepia-cpan-desc:                       CPAN browsing.        (line 17)
-* sepia-cpan-doc:                        CPAN browsing.        (line 29)
-* sepia-cpan-install:                    CPAN browsing.        (line 33)
-* sepia-cpan-list:                       CPAN browsing.        (line 21)
-* sepia-cpan-readme:                     CPAN browsing.        (line 25)
-* sepia-cpan-search:                     CPAN browsing.        (line 13)
-* sepia-defs:                            Navigation.           (line 52)
-* sepia-dwim:                            Navigation.           (line 20)
-* sepia-eval-defun:                      Evaluation.           (line 12)
-* sepia-eval-expression:                 Evaluation.           (line 23)
-* sepia-indent-or-complete:              Completion.           (line 43)
-* sepia-install-eldoc:                   Documentation.        (line 29)
-* sepia-jump-to-symbol:                  Navigation.           (line 36)
-* sepia-load-file:                       Evaluation.           (line 17)
-* sepia-location:                        Navigation.           (line 29)
-* sepia-mode:                            Editing.              (line  6)
-* sepia-module-find:                     Navigation.           (line 56)
-* sepia-module-list:                     Documentation.        (line 25)
-* sepia-next:                            Navigation.           (line 90)
-* sepia-package-list:                    Documentation.        (line 19)
-* sepia-perl-ne-region:                  Mutilation.           (line 17)
-* sepia-perl-pe-region:                  Mutilation.           (line 12)
-* sepia-perldoc-this:                    Documentation.        (line 12)
-* sepia-perlize-region:                  Mutilation.           (line 20)
-* sepia-rebuild:                         Navigation.           (line 94)
-* sepia-rename-lexical:                  Other commands.       (line  7)
-* sepia-repl:                            Interactive Perl.     (line  6)
-* sepia-scratch:                         Scratchpad.           (line  6)
-* sepia-set-cwd:                         Evaluation.           (line 28)
-* sepia-var-defs:                        Navigation.           (line 81)
-* sepia-var-uses:                        Navigation.           (line 77)
-* sepia-view-pod:                        Documentation.        (line 16)
+* sepia-apropos:                         Navigation.          (line  68)
+* sepia-apropos-module:                  Navigation.          (line  71)
+* sepia-callees:                         Navigation.          (line  81)
+* sepia-callers:                         Navigation.          (line  77)
+* sepia-complete-symbol:                 Completion.          (line  38)
+* sepia-cpan-desc:                       CPAN browsing.       (line  17)
+* sepia-cpan-doc:                        CPAN browsing.       (line  29)
+* sepia-cpan-install:                    CPAN browsing.       (line  33)
+* sepia-cpan-list:                       CPAN browsing.       (line  21)
+* sepia-cpan-readme:                     CPAN browsing.       (line  25)
+* sepia-cpan-search:                     CPAN browsing.       (line  13)
+* sepia-defs:                            Navigation.          (line  60)
+* sepia-dwim:                            Navigation.          (line  20)
+* sepia-eval-defun:                      Evaluation.          (line  12)
+* sepia-eval-expression:                 Evaluation.          (line  23)
+* sepia-indent-or-complete:              Completion.          (line  43)
+* sepia-install-eldoc:                   Documentation.       (line  29)
+* sepia-jump-to-symbol:                  Navigation.          (line  36)
+* sepia-load-file:                       Evaluation.          (line  17)
+* sepia-location:                        Navigation.          (line  29)
+* sepia-mode:                            Editing.             (line   6)
+* sepia-module-find:                     Navigation.          (line  64)
+* sepia-module-list:                     Documentation.       (line  25)
+* sepia-next:                            Navigation.          (line  98)
+* sepia-package-list:                    Documentation.       (line  19)
+* sepia-perl-ne-region:                  Mutilation.          (line  17)
+* sepia-perl-pe-region:                  Mutilation.          (line  12)
+* sepia-perldoc-this:                    Documentation.       (line  12)
+* sepia-perlize-region:                  Mutilation.          (line  20)
+* sepia-pod-follow-link-at-point:        Navigation.          (line  43)
+* sepia-rebuild:                         Navigation.          (line 102)
+* sepia-rename-lexical:                  Other commands.      (line   7)
+* sepia-repl:                            Interactive Perl.    (line   6)
+* sepia-scratch:                         Scratchpad.          (line   6)
+* sepia-set-cwd:                         Evaluation.          (line  28)
+* sepia-var-defs:                        Navigation.          (line  89)
+* sepia-var-uses:                        Navigation.          (line  85)
+* sepia-view-pod:                        Documentation.       (line  16)
 
 
 File: sepia.info,  Node: Variable Index,  Prev: Function Index,  Up: Top
@@ -958,25 +982,25 @@ Node: Getting Started1139
 Node: Philosophy1764
 Ref: Philosophy-Footnote-14830
 Node: Related Work5064
-Node: Editing6230
-Node: Completion6711
-Node: Navigation8788
-Node: Documentation12346
-Node: Other commands13916
-Node: Interactive Perl14251
-Node: Shortcuts15147
-Node: Debugger19004
-Node: Evaluation20548
-Node: Mutilation21524
-Node: Scratchpad22476
-Node: CPAN browsing22881
-Node: Customization23875
-Node: Emacs Customization24181
-Node: Perl Customization26692
-Node: Internals28588
-Node: FAQ28944
-Node: Credits29962
-Node: Function Index30414
-Node: Variable Index33260
+Node: Editing6447
+Node: Completion6928
+Node: Navigation9005
+Node: Documentation12904
+Node: Other commands14474
+Node: Interactive Perl14809
+Node: Shortcuts15705
+Node: Debugger19715
+Node: Evaluation21259
+Node: Mutilation22235
+Node: Scratchpad23187
+Node: CPAN browsing23592
+Node: Customization24586
+Node: Emacs Customization24892
+Node: Perl Customization27403
+Node: Internals29299
+Node: FAQ29655
+Node: Credits30852
+Node: Function Index31304
+Node: Variable Index34223
 
 End Tag Table

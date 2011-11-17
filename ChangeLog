@@ -1,3 +1,46 @@
+2011-11-16  Sean O'Rourke  <seano@cpan.org>
+
+	* VERSION: 0.992
+
+2011-11-14  Sean O'Rourke  <seano@cpan.org>
+
+	* sepl: add some docs.
+
+2011-11-10  Sean O'Rourke  <seano@cpan.org>
+
+	* lib/Sepia.pm (repl_who): list lexicals in strict-mode.
+	(repl_eval,repl_strict,call_strict): eliminate
+	Lexical::Persistence, which is more trouble than it's worth.
+	(repl_size): list lexical sizes in strict-mode.
+
+2011-11-02  Sean O'Rourke  <seano@cpan.org>
+
+	* lib/Sepia/ReadLine.pm (rl_complete): Unify T:R:{Perl,GNU}
+
+2011-10-24  Sean O'Rourke  <seano@cpan.org>
+
+	* sepia.el (sepia-[be]ol-from): use line-{beginning,end}-position.
+	(sepia-shared-map): remap C-c C-t to cperl-invert-if-unless.
+
+2011-10-23  Sean O'Rourke  <seano@cpan.org>
+
+	* lib/Sepia/ReadLine.pm (repl): support Term::ReadLine::Perl.
+
+2011-10-07  Sean O'Rourke  <seano@cpan.org>
+
+	* sepia.texi (Navigation): add sepia-pod-follow-link-at-point and
+	associated key-reshuffling.
+	* sepia.el (sepia-pod-follow-link-at-point): new function to
+	follow POD links from source.
+	(sepia-metapoint-map): shuffle keys for
+	sepia-pod-follow-link-at-point.
+
+2011-03-20  Sean O'Rourke  <seano@cpan.org>
+
+	* lib/Sepia/Xref.pm: POD fix.
+	* Makefile.PL: don't install .elc files, since that breaks Debian.
+	Patches from Hilko Bengen.
+
 2011-03-14  Sean O'Rourke  <seano@cpan.org>
 
 	* VERSION: 0.991_05 (testing).

@@ -131,10 +131,15 @@ END_MAKETXT
 END_MAKETXT
 
     if ( $SITE_LISP ) {
-        $maketxt .= <<"END_MAKETXT"
+        $maketxt .= <<"END_MAKETXT";
 	install -d -m755 \$(DESTDIR)$SITE_LISP
-	install -m644 *.el *.elc \$(DESTDIR)$SITE_LISP
+	install -m644 *.el \$(DESTDIR)$SITE_LISP
 END_MAKETXT
+          if ( $EMACS ) {
+              $maketxt .= <<"END_MAKETXT";
+	install -m644 *.elc \$(DESTDIR)$SITE_LISP
+END_MAKETXT
+          }
     } else {
         print <<'END_MSG'
 
@@ -176,11 +181,11 @@ exit pod2usage( '-verbose' => 1 ) if $HELP;
 test_for 'Devel::Peek', 'Printing internals requires Devel::Peek';
 test_for 'Devel::Size', 'Printing variable sizes requires Devel::Size';
 test_for 'IO::Scalar', 'Printing internals requires IO::Scalar because Devel::Peek sucks';
-test_for 'Lexical::Persistence', 'Strict mode requires Lexical::Persistence';
+test_for 'PadWalker', 'Strict mode requires PadWalker';
+test_for 'Devel::LexAlias', 'Strict mode requires Devel::LexAlias';
 test_for 'LWP::Simple', 'CPAN documentation browsing requires LWP::Simple';
 test_for 'Module::CoreList', 'sepia-core-version requires Module::CoreList';
 test_for 'Module::Info', 'Required for some Emacs functions';
-test_for 'PadWalker', 'Stack/lexical inspection requires PadWalker >= 1.0';
 test_for 'BSD::Resource', 'Detailed command timing';
 test_for 'Time::HiRes', 'Basic command timing';
 # test_for 'Pod::Webserver', 'Pod::Webserver creates nice documentation.';
@@ -188,8 +193,10 @@ test_for 'Time::HiRes', 'Basic command timing';
 
 $INSTALL_INFO = 'install-info';
 
-$EMACS        ||= prompt_for_emacs()
-    or warn "Disabling elisp compilation and dir detection.\n";
+if ( !defined $EMACS ) {
+    $EMACS = prompt_for_emacs()
+      or warn "Disabling elisp compilation and dir detection.\n";
+}
 $SITE_LISP    ||= prompt_for_sitelisp();
 $INFO_DIR     ||= prompt_for_infodir();
 $INSTALL_INFO ||= prompt("install-info program?", 'install-info')

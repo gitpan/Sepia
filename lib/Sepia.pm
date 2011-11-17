@@ -33,13 +33,11 @@ interface.
 
 =cut
 
-$VERSION = '0.991_05';
+$VERSION = '0.992';
 BEGIN {
-    # a less annoying version of strict and warnings
-    if (!eval 'use common::sense;1') {
-        eval 'use strict';
+    if ($] >= 5.012) {
+        eval 'no warnings "deprecated"'; # undo some of the 5.12 suck.
     }
-    no warnings 'deprecated';       # undo some of the 5.12 suck.
     # Not as useful as I had hoped...
     sub track_requires
     {
@@ -52,6 +50,7 @@ BEGIN {
     BEGIN { sub TRACK_REQUIRES () { $ENV{TRACK_REQUIRES}||0 } };
     unshift @INC, \&Sepia::track_requires if TRACK_REQUIRES;
 }
+use strict;
 use B;
 use Sepia::Debug;               # THIS TURNS ON DEBUGGING INFORMATION!
 use Cwd 'abs_path';
@@ -306,7 +305,7 @@ C<$type> matching C<$str>.
 
 sub lexical_completions
 {
-    eval q{ require PadWalker; import PadWalker 'peek_sub' };
+    eval q{ use PadWalker 'peek_sub' };
     # "internal" function, so don't warn on failure
     return if $@;
     *lexical_completions = sub {
@@ -559,7 +558,7 @@ our $INST;
 sub inst()
 {
     unless ($INST) {
-        eval 'require ExtUtils::Installed';
+        require ExtUtils::Installed;
         $INST = new ExtUtils::Installed;
     }
     $INST;
@@ -1063,45 +1062,22 @@ sub define_shortcuts
 
 =item C<repl_strict([$value])>
 
-Toggle strict mode.  Requires L<Lexical::Persistence>.
+Toggle strict mode.  Requires L<PadWalker> and L<Devel::LexAlias>.
 
 =cut
 
 sub repl_strict
 {
-    eval q{ require Lexical::Persistence; import Lexical::Persistence };
+    eval q{ use PadWalker qw(peek_sub set_closed_over);
+            use Devel::LexAlias 'lexalias';
+    };
     if ($@) {
-        print "Strict mode requires Lexical::Persistence.\n";
+        print "Strict mode requires PadWalker and Devel::LexAlias.\n";
     } else {
-        # L::P has the stupid behavior of not persisting variables
-        # starting with '_', and dividing them into "contexts" based
-        # on whatever comes before the first underscore.  Get rid of
-        # that.
-        *Lexical::Persistence::parse_variable = sub {
-            my ($self, $var) = @_;
-
-            return unless (
-		my ($sigil, $member) = (
-                    $var =~ /^([\$\@\%])(\S+)/
-		)
-            );
-            my $context = '_';
-
-            if (defined $context) {
-		if (exists $self->{context}{$context}) {
-                    return $sigil, $context, $member if $context eq "arg";
-                    return $sigil, $context, "$sigil$member";
-		}
-		return $sigil, "_", "$sigil$context\_$member";
-            }
-
-            return $sigil, "_", "$sigil$member";
-        };
-
         *repl_strict = sub {
             my $x = as_boolean(shift, $STRICT);
             if ($x && !$STRICT) {
-                $STRICT = new Lexical::Persistence;
+                $STRICT = {};
             } elsif (!$x) {
                 undef $STRICT;
             }
@@ -1117,31 +1093,36 @@ sub repl_size
         print "Size requires Devel::Size.\n";
     } else {
         *Sepia::repl_size = sub {
-            no strict 'refs';
-            ## XXX: C&P from repl_who:
-            my ($pkg, $re) = split ' ', shift || '';
-            if ($pkg =~ /^\/(.*)\/?$/) {
-                $pkg = $PACKAGE;
+            my ($pkg, $re) = split ' ', shift, 2;
+            if ($re) {
+                $re =~ s!^/|/$!!g;
+            } elsif (!$re && $pkg =~ /^\/(.*?)\/?$/) {
                 $re = $1;
+                undef $pkg;
             } elsif (!$pkg) {
-                $pkg = 'main';
                 $re = '.';
-            } elsif (!$re && !%{$pkg.'::'}) {
-                $re = $pkg;
-                $pkg = $PACKAGE;
             }
-            my @who = who($pkg, $re);
+            my (@who, %res);
+            if ($STRICT && !$pkg) {
+                @who = grep /$re/, keys %$STRICT;
+                for (@who) {
+                    $res{$_} = Devel::Size::total_size($Sepia::STRICT->{$_});
+                }
+            } else {
+                no strict 'refs';
+                $pkg ||= 'main';
+                @who = who($pkg, $re);
+                for (@who) {
+                    next unless /^[\$\@\%\&]/; # skip subs.
+                    next if $_ eq '%SIG';
+                    $res{$_} = eval "no strict; package $pkg; Devel::Size::total_size \\$_;";
+                }
+            }
             my $len = max(3, map { length } @who) + 4;
             my $fmt = '%-'.$len."s%10d\n";
             # print "$pkg\::/$re/\n";
             print 'Var', ' ' x ($len + 2), "Bytes\n";
             print '-' x ($len-4), ' ' x 9, '-' x 5, "\n";
-            my %res;
-            for (@who) {
-                next unless /^[\$\@\%\&]/; # skip subs.
-                next if $_ eq '%SIG';
-                $res{$_} = eval "no strict; package $pkg; Devel::Size::total_size \\$_;";
-            }
             for (sort { $res{$b} <=> $res{$a} } keys %res) {
                 printf $fmt, $_, $res{$_};
             }
@@ -1384,16 +1365,24 @@ sub columnate
 
 sub repl_who
 {
-    my ($pkg, $re) = split ' ', shift;
-    no strict;
-    if ($pkg && $pkg =~ /^\/(.*)\/?$/) {
-        $pkg = $PACKAGE;
+    my ($pkg, $re) = split ' ', shift, 2;
+    if ($re) {
+        $re =~ s!^/|/$!!g;
+    } elsif (!$re && $pkg =~ /^\/(.*?)\/?$/) {
         $re = $1;
-    } elsif (!$re && !%{$pkg.'::'}) {
-        $re = $pkg;
-        $pkg = $PACKAGE;
+        undef $pkg;
+    } elsif (!$pkg) {
+        $re = '.';
     }
-    print columnate who($pkg || $PACKAGE, $re);
+    my @x;
+    if ($STRICT && !$pkg) {
+        @x = grep /$re/, keys %$STRICT;
+        $pkg = '(lexical)';
+    } else {
+        $pkg ||= $PACKAGE;
+        @x = who($pkg, $re);
+    }
+    print($pkg, "::/$re/\n", columnate @x) if @x;
 }
 
 =item C<@m = methods($package [, $qualified])>
@@ -1477,25 +1466,49 @@ sub repl_shell
     print `$cmd 2>& 1`;
 }
 
+# Stolen from Lexical::Persistence, then simplified.
+sub call_strict
+{
+    my ($sub) = @_;
+
+    # steal any new "my" variables
+    my $pad = peek_sub($sub);
+    for my $k (keys %$pad) {
+        unless (exists $STRICT->{$k}) {
+            if ($k =~ /^\$/) {
+                $STRICT->{$k} = \(my $x);
+            } elsif ($k =~ /^\@/) {
+                $STRICT->{$k} = []
+            } elsif ($k =~ /^\%/) {
+                $STRICT->{$k} = +{};
+            }
+        }
+    }
+
+    # Grab its lexials
+    lexalias($sub, $_, $STRICT->{$_}) for keys %$STRICT;
+    $sub->();
+}
+
 sub repl_eval
 {
     my ($buf) = @_;
     no strict;
     # local $PACKAGE = $pkg || $PACKAGE;
     if ($STRICT) {
+        my $ctx = join(',', keys %$STRICT);
+        $ctx = $ctx ? "my ($ctx);" : '';
         if ($WANTARRAY eq '$') {
             $buf = 'scalar($buf)';
         } elsif ($WANTARRAY ne '@') {
             $buf = '$buf;1';
         }
-        my $ctx = join(',', keys %{$STRICT->get_context('_')});
-        $ctx = $ctx ? "my ($ctx);" : '';
         $buf = eval "sub { package $PACKAGE; use strict; $ctx $buf }";
         if ($@) {
             print "ERROR\n$@\n";
             return;
         }
-        $STRICT->call($buf);
+        call_strict($buf);
     } else {
         $buf = "do { package $PACKAGE; no strict; $buf }";
         if ($WANTARRAY eq '@') {
@@ -1631,6 +1644,10 @@ sub repl_lsmod
     $pat = qr/$pat/;
     my $first = 1;
     my $fmt =  "%-20s%8s  %s\n";
+    # my $shorten = join '|', sort { length($a) <=> length($b) } @INC;
+    # my $ss = sub {
+    #     s/^(?:$shorten)\/?//; $_
+    # };
     for (sort keys %INC) {
         my $file = $_;
         s!/!::!g;
@@ -2044,7 +2061,7 @@ Bug reports welcome, patches even more welcome.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2005-2010 Sean O'Rourke.  All rights reserved, some
+Copyright (C) 2005-2011 Sean O'Rourke.  All rights reserved, some
 wrongs reversed.  This module is distributed under the same terms as
 Perl itself.
 

@@ -4,7 +4,7 @@
 ;; Author: Sean O'Rourke <seano@cpan.org>
 ;; Keywords: Perl, languages
 
-;; Copyright (C) 2004-2010 Sean O'Rourke.  All rights reserved, some
+;; Copyright (C) 2004-2011 Sean O'Rourke.  All rights reserved, some
 ;;   wrongs reversed.  This code is distributed under the same terms
 ;;   as Perl itself.
 
@@ -201,13 +201,14 @@ each inferior Perl prompt."
                   ;;		  ("V" . sepia-var-assigns)
                   ("\M-." . sepia-dwim)
                   ;; ("\M-." . sepia-location)
-                  ("l" . sepia-location)
+                  ("d" . sepia-location)
                   ("f" . sepia-defs)
                   ("r" . sepia-rebuild)
                   ("m" . sepia-module-find)
                   ("n" . sepia-next)
                   ("t" . find-tag)
-                  ("d" . sepia-perldoc-this)
+                  ("p" . sepia-perldoc-this)
+                  ("l" . sepia-pod-follow-link-at-point)
                   ("u" . sepia-describe-object)))
       (define-key map (car kv) (cdr kv)))
     map)
@@ -221,9 +222,12 @@ might want to bind your keys, which works best when bound to
     (define-key map "\M-," 'sepia-next)
     (define-key map "\C-\M-x" 'sepia-eval-defun)
     (define-key map "\C-c\C-l" 'sepia-load-file)
+    (define-key map "\C-cn" 'sepia-perl-ne-region)
     (define-key map "\C-c\C-p" 'sepia-view-pod) ;was cperl-pod-spell
+    (define-key map "\C-cp" 'sepia-perl-pe-region)
     (define-key map "\C-c\C-d" 'cperl-perldoc)
-    (define-key map "\C-c\C-t" 'sepia-repl)
+    ;; (define-key map "\C-c\C-t" 'sepia-repl)
+    (define-key map "\C-c\C-t" 'cperl-invert-if-unless)
     (define-key map "\C-c\C-r" 'sepia-eval-region)
     (define-key map "\C-c\C-s" 'sepia-scratch)
     (define-key map "\C-c\C-e" 'sepia-eval-expression)
@@ -234,6 +238,7 @@ might want to bind your keys, which works best when bound to
 
 ;;;###autoload
 (defun sepia-eval-region (beg end)
+  "Evaluate region using current Sepia process."
   (interactive "r")
   (sepia-eval (buffer-substring beg end)))
 
@@ -515,7 +520,7 @@ symbol at point."
   `(let ((it ,test))
      (if it ,then ,@else)))
 
-(defvar sepia-found-refiner)
+(defvar sepia-found-refiner nil)
 
 (defun sepia-show-locations (locs &optional unobtrusive)
   (setq locs (remove nil locs)) ; XXX where's nil from?
@@ -541,8 +546,8 @@ symbol at point."
                                            (line-number-at-pos)))
                                 (setq line (line-number-at-pos))
                                 (let ((tmpstr
-                                       (buffer-substring (sepia-bol-from (point))
-                                                         (sepia-eol-from (point)))))
+                                       (buffer-substring (sepia-bol-from)
+                                                         (sepia-eol-from))))
                                   (if (> (length tmpstr) 60)
                                       (concat "\n    " tmpstr)
                                     tmpstr)))
@@ -860,8 +865,8 @@ also rebuild the xref database."
        (let ((var-re (concat "\\_<" ident "\\_>")))
 	 (cond
 	   (line (goto-line line)
-		 (or (re-search-backward var-re (sepia-bol-from (point) -5) t)
-		     (re-search-forward var-re (sepia-bol-from (point) 5) t)))
+		 (or (re-search-backward var-re (sepia-bol-from nil -5) t)
+		     (re-search-forward var-re (sepia-bol-from nil 5) t)))
 	   (t (goto-char (point-min))
               (re-search-forward var-re nil t))))))
     (t (lambda (line ident) (and line (goto-line line))))))
@@ -1036,7 +1041,7 @@ The function is intended to be bound to \\M-TAB, like
       ;; 1.x - look for a module
       (unless completions
         (setq completions
-              (and (looking-back " *\\(?:use\\|require\\|package\\|no\\)\\s +[^ ]*" (sepia-bol-from (point)))
+              (and (looking-back " *\\(?:use\\|require\\|package\\|no\\)\\s +[^ ]*" (sepia-bol-from))
                    (xref-apropos-module
                     (multiple-value-bind (typ name)
                         (sepia-ident-before-point)
@@ -1213,8 +1218,8 @@ Does not require loading.")
            (car
             (sepia-eval-raw
              (concat "$Sepia::REPL{eval}->(q#"
-                     (buffer-substring (sepia-bol-from (point))
-                                       (sepia-eol-from (point))) "#)"))))))
+                     (buffer-substring (sepia-bol-from)
+                                       (sepia-eol-from)) "#)"))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Miscellany
@@ -1251,17 +1256,19 @@ Does not require loading.")
                 (pop-to-buffer (current-buffer))))
             (message "%s" new-str)))))
 
-(defun sepia-eol-from (pt &optional n)
-  (save-excursion
-    (goto-char pt)
-    (end-of-line n)
-    (point)))
+(defun sepia-eol-from (&optional pt n)
+  (if (not pt)
+      (line-end-position n)
+    (save-excursion
+      (goto-char pt)
+      (line-end-position n))))
 
-(defun sepia-bol-from (pt &optional n)
-  (save-excursion
-    (goto-char pt)
-    (beginning-of-line n)
-    (point)))
+(defun sepia-bol-from (&optional pt n)
+  (if (not pt)
+      (line-beginning-position n)
+    (save-excursion
+      (goto-char pt)
+      (line-beginning-position n))))
 
 (defun sepia-perl-pe-region (expr beg end &optional replace-p)
   "Do the equivalent of perl -pe on region
@@ -1363,7 +1370,7 @@ With prefix arg, replace the region with the result."
             (goto-char beg)
             (beginning-of-line (string-to-number (match-string 1 (cdr res))))
             (search-forward (match-string 2 (cdr res))
-                            (sepia-eol-from (point)) t))
+                            (sepia-eol-from) t))
           (message "Error: %s" (cdr res)))
         (xref-redefined sub sepia-eval-package)
         (message "Defined %s" sub))))
@@ -1617,7 +1624,7 @@ This automatically disables `cperl-lazy-installed', the
   (interactive "r")
   (goto-char beg)
   (let ((msgs nil))
-    (loop for w = (sepia-extract-next-warning (sepia-bol-from (point)) end)
+    (loop for w = (sepia-extract-next-warning (sepia-bol-from) end)
        while w
        do (destructuring-bind (file line msg) w
             (push (format "%s:%d:%s\n" (abbreviate-file-name file) line msg)
@@ -1703,6 +1710,92 @@ Create a `dired-mode' buffer listing all flies installed by `package'."
           (setq ls nil))
         (dired-mode pfx)
         (pop-to-buffer (current-buffer))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Follow POD links from source
+
+(defun sepia-pod-follow-link-at-point (str src)
+  "Follow a POD-style link.
+
+If called interactively, follow link at point, or prompt if no
+such link exists.  With prefix argument, view formatted
+documentation with `sepia-perldoc-this'; otherwise, view raw
+documentation source."
+  (interactive (list
+                (or (sepia-pod-link-at-point (point))
+                    (read-string "Link: "))
+                (not current-prefix-arg)))
+  (sepia-pod-follow-link str src))
+
+(defun sepia-pod-follow-link (str &optional src)
+  "Follow link STR to documentation, or to source of documentation if SRC.
+
+For URL links (e.g. L<http://www.emacs.org/>), always follow the
+link using `browse-url'."
+  ;; strip off L<...>
+  (when (string-match "^L<\\(.*\\)>$" str)
+    (setq str (match-string 1 str)))
+  ;; strip out text|...
+  (when (string-match "[^/\"|]+|\\(.*\\)" str)
+    (setq str (match-string 1 str)))
+  (cond
+   ;; URL -- no way to "jump to source"
+   ((string-match "^[a-z]+:.+" str)
+    ;; view the URL -- there's no "source"
+    (browse-url str))
+
+   ;; name/sec
+   ((string-match "^\\([^/\"]+\\)/\"?\\([^\"]+\\)\"?$" str)
+    ;; open the POD, then go to the section
+    ;; -- `M-. d' or `M-. m', plus jump
+    (let ((page (match-string 1 str))
+          (sec (match-string 2 str)))
+      (sepia-perldoc-this page)
+      (if src
+          (let (target)
+            (sepia-module-find page)
+            (save-excursion
+              (goto-char (point-min))
+              (if (search-forward (concat "^=.*" sec) nil t)
+                  (goto-char target)
+                (message "Can't find anchor for %s." str))))
+        (w3m-search-name-anchor sec))))
+
+   ;; /"sec" or /sec or "sec"
+   ((or (string-match "^/\"?\\([^\"]+\\)\"?$" str)
+        (string-match "^\"\\([^\"]+\\)\"$" str))
+    ;; jump to POD header in current file or in displayed POD
+    (let ((sec (match-string 1 str)))
+      (if src
+          (let (target)
+            (save-excursion
+              (goto-char (point-min))
+              (unless (search-forward (concat "^=.*" sec) nil t)
+                (error "Can't find anchor for %s." str))
+              (setq target (match-beginning)))
+            (and target (goto-char target)))
+        (sepia-view-pod)
+        (w3m-search-name-anchor (match-string 1 str)))))
+
+   ;; name
+   ((string-match "^[^/\"]+$" str)
+    ;; view the pod
+    ;; -- `M-. d' or `M-. m'
+    (if src
+        (sepia-module-find str)
+      (sepia-perldoc-this str)))
+   (t (error "Can't understand POD link %s." str))))
+
+(defun sepia-pod-link-at-point (p)
+  "Extract POD link at point, or nil."
+  (let* ((bol (save-excursion (forward-line 0) (point)))
+         (eol (save-excursion (forward-line 1) (backward-char 1) (point)))
+         (beg (or (save-excursion
+                    (forward-char 1)    ;in case we're on < of L<
+                    (search-backward "L<" bol t)) p))
+         (end (save-excursion (search-forward ">" eol t))))
+    (if (and beg end) (buffer-substring-no-properties (+ beg 2) (1- end))
+      nil)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Fight CPerl a bit -- it can be opinionated

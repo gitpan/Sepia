@@ -89,6 +89,8 @@ Emacs-style ChangeLog entry.
    codebases (Sepia's and complete.el's), I know there are always a
    lot of subtle cases to get right, and what acts "naturally" by
    human standards is extremely complicated to specify in code.
+** (Easy) Document existing hooks and add_hook()/remove_hook()
+@PRE_PROMPT, @PRE_EVAL, @POST_EVAL
 ** (Hard) Add appropriate hooks
    Possibly update existing functions to make use of hooks for better
    modularity.
@@ -120,7 +122,7 @@ While traversing inside File::Find::contract_name.  Backtrace:
     #3  0x000000010006e6cc in Perl_runops_standard ()
     #4  0x000000010006e43a in perl_run ()
 * COPYRIGHT AND LICENCE
-Copyright (C) 2004-2010 Sean O'Rourke
+Copyright (C) 2004-2011 Sean O'Rourke
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, at the time at which this
