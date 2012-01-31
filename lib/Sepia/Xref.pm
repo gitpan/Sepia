@@ -32,7 +32,6 @@ most of its code.
 # use Sepia '_apropos_re';
 require Sepia;
 BEGIN { *_apropos_re = *Sepia::_apropos_re; }
-$VERSION = '0.65';
 
 use strict;
 use Config;
@@ -115,9 +114,9 @@ my %code = (intro => "i", used => "",
 	    subdef => "s", subused => "&",
 	    formdef => "f", meth => "->");
 
-=over 4
-
 =head2 Functions
+
+=over 4
 
 =item C<guess_module_file($pack, $ofile)>
 

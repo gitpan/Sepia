@@ -979,17 +979,9 @@ REPL shortcuts."
   (interactive)
   (error "TODO"))
 
-(defvar sepia-shortcuts
-  '(
-"break"     "eval"      "lsbreak"   "quit"      "size"      "wantarray"
-"cd"        "format"    "methods"   "reload"    "strict"    "who"
-"debug"     "freload"   "package"   "restart"   "test"
-"define"    "help"      "pdl"       "save"      "time"      
-"delete"    "load"      "pwd"       "shell"     "undef"     
-)
-  "List of currently-defined REPL shortcuts.
-
-XXX: this needs to be updated whenever you add one on the Perl side.")
+(defun sepia-shortcuts ()
+  "Return a list of current Sepia shortcuts."
+  (sepia-eval "sort keys %Sepia::REPL" 'list-context))
 
 (defun sepia-complete-symbol ()
   "Try to complete the word at point.
@@ -1021,23 +1013,27 @@ The function is intended to be bound to \\M-TAB, like
 
       ;; Otherwise actually do completion:
       ;; 0 - try a shortcut
+      (multiple-value-bind (typ name) (sepia-ident-before-point)
       (when (eq major-mode 'sepia-repl-mode)
         (save-excursion
           (comint-bol)
-          (when (looking-at ",\\([a-z]+\\)$")
+          (when (looking-at ",\\([a-z]*\\)$")
             (let ((str (match-string 1)))
               (setq len (length str)
-                    completions (all-completions str sepia-shortcuts))))))
+                    completions (all-completions str (sepia-shortcuts)))))))
       ;; 1 - Look for a method call:
       (unless completions
         (setq meth (sepia-simple-method-before-point))
         (when meth
           (setq len (length (caddr meth))
-                completions (xref-method-completions
+                name (caddr meth)
+                completions
+                (mapcar
+                 (lambda (x)  (format "%s->%s" (car meth) x))
+                 (xref-method-completions
                              (cons 'expr (format "'%s'" (car meth)))
                              (cadr meth)
-                             "Sepia::repl_eval")
-                type (format "%s->" (car meth)))))
+                             "Sepia::repl_eval")))))
       ;; 1.x - look for a module
       (unless completions
         (setq completions
@@ -1049,7 +1045,6 @@ The function is intended to be bound to \\M-TAB, like
                       name))
               )))
 
-      (multiple-value-bind (typ name) (sepia-ident-before-point)
         (unless completions
           ;; 2 - look for a regular function/variable/whatever
           (setq type typ
@@ -1752,11 +1747,12 @@ link using `browse-url'."
           (sec (match-string 2 str)))
       (sepia-perldoc-this page)
       (if src
-          (let (target)
+          (let (target
+                (case-fold-search t))
             (sepia-module-find page)
             (save-excursion
               (goto-char (point-min))
-              (if (search-forward (concat "^=.*" sec) nil t)
+              (if (re-search-forward (concat "^=.*" sec) nil t)
                   (goto-char target)
                 (message "Can't find anchor for %s." str))))
         (w3m-search-name-anchor sec))))
@@ -1767,12 +1763,13 @@ link using `browse-url'."
     ;; jump to POD header in current file or in displayed POD
     (let ((sec (match-string 1 str)))
       (if src
-          (let (target)
+          (let (target
+                (case-fold-search t))
             (save-excursion
               (goto-char (point-min))
-              (unless (search-forward (concat "^=.*" sec) nil t)
+              (unless (re-search-forward (concat "^=.*" sec) nil t)
                 (error "Can't find anchor for %s." str))
-              (setq target (match-beginning)))
+              (setq target (match-beginning 0)))
             (and target (goto-char target)))
         (sepia-view-pod)
         (w3m-search-name-anchor (match-string 1 str)))))
@@ -1789,7 +1786,7 @@ link using `browse-url'."
 (defun sepia-pod-link-at-point (p)
   "Extract POD link at point, or nil."
   (let* ((bol (save-excursion (forward-line 0) (point)))
-         (eol (save-excursion (forward-line 1) (backward-char 1) (point)))
+         (eol (line-end-position))
          (beg (or (save-excursion
                     (forward-char 1)    ;in case we're on < of L<
                     (search-backward "L<" bol t)) p))

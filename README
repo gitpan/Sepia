@@ -107,9 +107,6 @@ reproduce, with the dates they were first observed.
    Nothing smart is done about packages, so e.g. "new Foo" will result
    in listings for every instance of "new" in your program.
 ** (2008-01-18) the first value printed in the debugger is undef.  why?!
-** (2009-12-13) completion deletes things it shouldn't
-   e.g. $x->method => method.  I need to rewrite this code to not
-   suck.
 ** (2010-09-30) <backspace> broken in view-mode
    <backspace> should scroll up if you enable view-mode, but for
    whatever reason it stays bound to hungry-delete.  I'm not sure if

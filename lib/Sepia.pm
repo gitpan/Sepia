@@ -33,7 +33,7 @@ interface.
 
 =cut
 
-$VERSION = '0.992';
+$VERSION = '0.992_01';
 BEGIN {
     if ($] >= 5.012) {
         eval 'no warnings "deprecated"'; # undo some of the 5.12 suck.

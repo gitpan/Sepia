@@ -1,3 +1,10 @@
+2012-01-30  Sean O'Rourke  <seano@cpan.org>
+
+	* sepia.el (sepia-complete-symbol): Finally fix method completion
+	  to not delete invocant.
+	(sepia-shortcuts): retrieve shortcuts dynamically.
+	(sepia-complete-symbol): use it.
+
 2011-11-16  Sean O'Rourke  <seano@cpan.org>
 
 	* VERSION: 0.992
